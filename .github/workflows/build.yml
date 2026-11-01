@@ -39,5 +39,10 @@ jobs:
           test -s dist/multi/stream.js
           test -s dist/multi/episodes.js
           test -s dist/multi/catalog.js
+          test -s dist/multi2/posts.js
+          test -s dist/multi2/meta.js
+          test -s dist/multi2/stream.js
+          test -s dist/multi2/episodes.js
+          test -s dist/multi2/catalog.js
       - name: Run MultiMovies regression tests
         run: node tests/test-multi.js
