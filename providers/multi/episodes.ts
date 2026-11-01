@@ -21,6 +21,30 @@ function parseEpisodes(html: string, pageUrl: string, season: string, cheerio: a
 
   const episodes: EpisodeLink[] = [];
   const seen = new Set<string>();
+
+  // Current MultiMovies pages use .episode-card > a[href] rather than the
+  // legacy .cinejoy-ep-card markup. Parse this structure explicitly first.
+  $(".episode-card").each((_index: number, card: any) => {
+    const el = $(card);
+    const anchor = el.find("a[href*='/episode/']").first().length
+      ? el.find("a[href*='/episode/']").first()
+      : el.find("a[href]").first();
+    const rawHref = anchor.attr("href") || "";
+    if (!rawHref) return;
+    let href = "";
+    try { href = new URL(rawHref, pageUrl).toString(); } catch { return; }
+    if (!/\/season\/\d+\/episode\/\d+/i.test(new URL(href).pathname) || seen.has(href)) return;
+    const title = clean(
+      anchor.attr("title") ||
+      anchor.text() ||
+      el.find("img").first().attr("alt") ||
+      "",
+    );
+    if (!title) return;
+    seen.add(href);
+    episodes.push({ title, link: href });
+  });
+
   grid.find(".cinejoy-ep-card").each((_index: number, card: any) => {
     const el = $(card);
     const anchor = el.find("a.cinejoy-ep-thumb-link").first();
@@ -208,15 +232,15 @@ export const getEpisodes = async function ({
     // ?season=N&ep_range=FIRST_EP&ep_order=oldest. Fetch each range so Vega
     // receives one complete season list rather than only the visible batch.
     const ranges: string[] = [];
-    $("#episodeRangeSelect option").each((_index: number, option: any) => {
+    $("#episodeRange option, #episodeRangeSelect option").each((_index: number, option: any) => {
       const value = clean($(option).attr("value"));
       if (/^\d+$/.test(value) && !ranges.includes(value)) ranges.push(value);
     });
 
     const initialRange =
       inputUrl.searchParams.get("ep_range") ||
-      clean($("#episodeRangeSelect option[selected]").first().attr("value")) ||
-      clean($("#episodeRangeSelect").first().val()) ||
+      clean($("#episodeRange option[selected], #episodeRangeSelect option[selected]").first().attr("value")) ||
+      clean($("#episodeRange, #episodeRangeSelect").first().val()) ||
       ranges[0] ||
       "";
 
