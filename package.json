@@ -18,7 +18,9 @@
     "dev:auto": "concurrently \"nodemon --watch providers --ext ts --exec \\\"npm run build:dev\\\"\" \"npm run dev\"",
     "auto": "node auto-dev.js",
     "start": "npm run build && npm run dev",
-    "test:iptv": "npm run build && node tests/test-iptv.js"
+    "test:iptv": "npm run build && node tests/test-iptv.js",
+    "test:multi-episodes": "node tests/test-multi-episodes.js",
+    "test:multi-stream": "node tests/test-multi-stream.js"
   },
   "devDependencies": {
     "@types/cheerio": "^0.22.35",
