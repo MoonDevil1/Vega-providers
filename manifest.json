@@ -16,5 +16,14 @@
     "type": "global",
     "hasSettings": false,
     "disabled": false
+  },
+  {
+    "display_name": "Multi 2",
+    "value": "multi2",
+    "version": "1.0.0",
+    "icon": "https://cdn.jsdelivr.net/gh/MoonDevil1/Vega-providers@main/assets/multimovies.svg",
+    "type": "global",
+    "hasSettings": false,
+    "disabled": false
   }
 ]
