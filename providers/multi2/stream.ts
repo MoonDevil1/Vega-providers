@@ -1,9 +1,9 @@
 /* Derived from Zenda-Cross/vega-providers (ISC); see NOTICE.md. */
 
 import { Stream, ProviderContext } from "../types";
-import { iqstExtractor } from "../extractors/iqst";
-import { vidboltExtractor } from "../extractors/vidbolt";
-import { cineverseExtractor } from "../extractors/cineverse";
+import { iqstExtractor } from "./extractors/iqst";
+import { vidboltExtractor } from "./extractors/vidbolt";
+import { cineverseExtractor } from "./extractors/cineverse";
 
 
 const REFERER = "https://m1.multimovies.courses/";
