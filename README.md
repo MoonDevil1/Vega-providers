@@ -1,4 +1,4 @@
-# Vega Provider: MultiMovies (v1.5.9)
+# Vega Providers: MultiMovies, Hindi IPTV and Multi 2
 
 Community provider extension for Vega App.
 
@@ -15,9 +15,13 @@ Community provider extension for Vega App.
 3. Refresh the provider list after the build workflow finishes.
 4. Select **MultiMovies**.
 
+## Multi 2
+
+**Multi 2** is a separate provider implementation based on the `multi` provider from [Zenda-Cross/vega-providers](https://github.com/Zenda-Cross/vega-providers/tree/main/providers/multi). Its upstream ISC attribution is retained in `providers/multi2/NOTICE.md`. It uses the separate provider ID `multi2`; the existing MultiMovies provider (`multi`) and Hindi IPTV provider (`iptv`) remain separate.
+
 ## Development
 
-Provider source is in `providers/multi/`; shared stream extractors are in `providers/extractors/`. Build output is generated in `dist/` by `npm run build`. GitHub Actions builds and commits the generated bundles after pushes to `main`.
+Provider source is in `providers/multi/`, `providers/multi2/`, and `providers/iptv/`; shared stream extractors are in `providers/extractors/`. Build output is generated in `dist/` by `npm run build`. GitHub Actions builds and commits the generated bundles after pushes to `main`.
 
 ```sh
 npm ci
