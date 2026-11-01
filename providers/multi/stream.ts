@@ -564,64 +564,50 @@ export async function getStream({
   const mediaType = detectMediaType(type, pageUrl, html);
   console.log("[stream] media type=" + mediaType + "  starting parallel run");
 
-  // 3) Fire ALL servers in parallel with per-server timeouts
-  const jobs = servers.map((server) => {
-    const budget = /streams\.iqsmartgames\.com\/embed\//i.test(server.url)
-      ? TIMEOUTS.IQST
-      : (TIMEOUTS[server.name] || TIMEOUTS.default);
-    const t = Date.now();
-
-    return raceWithAbort(
-      (innerSignal) => {
+  // 3) Resolve a small number of servers at a time. Vega Desktop routes
+  // each Axios request through a QuickJS-to-host RPC bridge (16 outstanding
+  // RPCs maximum). Unbounded fan-out can exhaust that bridge.
+  const settled: Array<{ server: ServerEntry; streams: Stream[] } | undefined> =
+    new Array(servers.length);
+  let nextServer = 0;
+  const workerCount = Math.min(2, servers.length);
+  const worker = async () => {
+    while (nextServer < servers.length) {
+      const index = nextServer++;
+      const server = servers[index];
+      try {
+        if (signal && signal.aborted) break;
         const direct = directMediaStream(server.url, server.name);
-        return direct.length > 0
-          ? Promise.resolve(direct)
-          : routeServer(server.url, mediaType, innerSignal, providerContext, pageUrl);
-      },
-      budget,
-      server.name,
-    ).then(
-      (streams) => {
-        const dt = Date.now() - t;
-        console.log("[stream] <- " + server.name + ": " + streams.length + " in " + dt + "ms");
-        return { server, streams };
-      },
-      (e: any) => {
-        const dt = Date.now() - t;
-        console.warn("[stream] x " + server.name + " (" + dt + "ms): " + (e && e.message));
-        return { server, streams: [] as Stream[] };
-      },
-    );
-  });
-
-  // Do not make a fast mirror wait for every slow mirror. Collect results as
-  // they finish and cap this lookup; unresolved slow servers can be tried on
-  // the next play attempt instead of blocking all playback.
-  const completed: Array<{ server: ServerEntry; streams: Stream[] }> = [];
-  let completedCount = 0;
+        const streams = direct.length > 0
+          ? direct
+          : await routeServer(server.url, mediaType, signal, providerContext, pageUrl);
+        settled[index] = { server, streams };
+        console.log("[stream] <- " + server.name + ": " + streams.length);
+      } catch (error: any) {
+        console.warn("[stream] x " + server.name + ": " + (error && error.message));
+        settled[index] = { server, streams: [] };
+      }
+    }
+  };
+  const workers = Array.from({ length: workerCount }, () => worker());
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
-  const trackedJobs = jobs.map((job) => job.then((result) => {
-    completed.push(result);
-    completedCount++;
-    return result;
-  }));
   await Promise.race([
-    Promise.all(trackedJobs),
-    new Promise<void>((resolve) => {
-      deadlineTimer = setTimeout(resolve, 24000);
-    }),
+    Promise.all(workers),
+    new Promise<void>((resolve) => { deadlineTimer = setTimeout(resolve, 24000); }),
   ]);
   if (deadlineTimer) clearTimeout(deadlineTimer);
-  const settled = completed;
-  if (completedCount < jobs.length) {
-    console.warn("[stream] returning partial results after 24000ms (" + completedCount + "/" + jobs.length + " servers finished)");
+  const completed = settled.filter(
+    (entry): entry is { server: ServerEntry; streams: Stream[] } => Boolean(entry),
+  );
+  if (completed.length < servers.length) {
+    console.warn("[stream] returning partial results after 24000ms (" + completed.length + "/" + servers.length + " servers finished)");
   }
 
   // 4) Merge
   const streamLinks: StreamEx[] = [];
   const fallbacks: Stream[] = [];
-  for (let i = 0; i < settled.length; i++) {
-    const { server, streams } = settled[i];
+  for (let i = 0; i < completed.length; i++) {
+    const { server, streams } = completed[i];
     if (streams.length === 0) {
       if (/rozgarlelo\.modiplay\.xyz\/embed\//i.test(server.url) || /streams\.iqsmartgames\.com\/embed\//i.test(server.url)) continue;
       fallbacks.push({
