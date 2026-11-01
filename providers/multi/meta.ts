@@ -18,6 +18,29 @@ const headers = {
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
 };
 
+function extractAssignedObject(html: string, variable: string): any {
+  const match = new RegExp("(?:const|let|var)\\s+" + variable + "\\s*=\\s*", "m").exec(html);
+  if (!match) return null;
+  const start = html.indexOf("{", match.index + match[0].length);
+  if (start < 0) return null;
+  let depth = 0, quote = "", escaped = false;
+  for (let i = start; i < html.length; i++) {
+    const ch = html[i];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === quote) quote = "";
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "\`") { quote = ch; continue; }
+    if (ch === "{") depth++;
+    else if (ch === "}" && --depth === 0) {
+      try { return JSON.parse(html.slice(start, i + 1)); } catch { return null; }
+    }
+  }
+  return null;
+}
+
 export const getMeta = async function ({
   link,
   providerContext,
@@ -54,31 +77,11 @@ export const getMeta = async function ({
       linkList: [],
     };
 
-    // Pull inline watchItem / watchConfig JSON objects
-    let watchItem: any = null;
-    let watchConfig: any = null;
-
-    $("script").each((_, el) => {
-      const txt = $(el).html() || "";
-
-      const itemMatch = txt.match(
-        /const\s+watchItem\s*=\s*(\{[\s\S]*?\})\s*;/
-      );
-      if (itemMatch && !watchItem) {
-        try {
-          watchItem = JSON.parse(itemMatch[1]);
-        } catch (_) {}
-      }
-
-      const cfgMatch = txt.match(
-        /const\s+watchConfig\s*=\s*(\{[\s\S]*?\})\s*;/
-      );
-      if (cfgMatch && !watchConfig) {
-        try {
-          watchConfig = JSON.parse(cfgMatch[1]);
-        } catch (_) {}
-      }
-    });
+    // Parse nested inline configuration safely; a non-greedy object regex
+    // truncates JSON at the first nested closing brace.
+    const pageHtml = String(response.data || "");
+    const watchItem = extractAssignedObject(pageHtml, "watchItem");
+    const watchConfig = extractAssignedObject(pageHtml, "watchConfig");
 
     // Title
     result.title =
@@ -100,10 +103,18 @@ export const getMeta = async function ({
       $(".cinejoy-detail-overview").first().text().trim() ||
       "";
 
-    // Type – check for Cinejoy episodes section
+    // Current pages use .episode-card; older pages used Cinejoy markup.
+    // The canonical route and visible TV Series label are reliable fallbacks
+    // when inline watchItem metadata is absent or has changed shape.
+    const hasEpisodeCards = $(".episode-card, .cinejoy-ep-card, a[href*='/season/'][href*='/episode/']").length > 0;
+    const isSeriesRoute = /\/series\//i.test(new URL(url).pathname);
+    const statusText = $(".cinejoy-spec-box, .watch-details, .cinejoy-detail-stage").text();
+    const hasSeriesStatus = /TV\s*Series|Series/i.test(statusText);
+    const itemType = String(watchItem?.type || watchConfig?.type || "").toLowerCase();
     const hasCinejoyEpisodes = $(".cinejoy-episodes-section").length > 0;
     result.type =
-      watchItem?.type === "tv" || watchItem?.type === "series" || hasCinejoyEpisodes ? "series" : "movie";
+      itemType === "tv" || itemType === "series" || hasCinejoyEpisodes ||
+      hasEpisodeCards || isSeriesRoute || hasSeriesStatus ? "series" : "movie";
 
     // IMDb ID (not exposed in this HTML)
     result.imdbId = "";
@@ -125,19 +136,25 @@ export const getMeta = async function ({
         { title: string; episodesLink: string }
       >();
 
-      // The page has two controls sharing the .cinejoy-season-select class:
-      // a season selector and an episode-range selector (e.g. "Episodes 25–32").
-      // Only the season dropdown represents seasons.
-      $(".cinejoy-season-pill-dropdown select[aria-label='Season'] option").each((_, opt) => {
-        const season = ($(opt).attr("value") || "").trim();
-        if (!season || !/^\d+$/.test(season)) return;
-
-        const label = $(opt).text().replace(/\s+/g, " ").trim() || `Season ${season}`;
-
-        seasonMap.set(season, {
-          title: label,
-          // The live site honors season + episode-range query parameters.
-          episodesLink: `${seriesBase}?season=${season}`,
+      // Support the legacy Cinejoy dropdown and current season selectors.
+      // Option values may be numeric or labels such as "Season 1".
+      const seasonSelectors = [
+        ".cinejoy-season-pill-dropdown select[aria-label='Season'] option",
+        "select[aria-label='Season'] option",
+        "select[name='season'] option",
+        "#seasonSelect option",
+        ".season-selector option",
+      ];
+      seasonSelectors.forEach((selector) => {
+        $(selector).each((_, opt) => {
+          const value = ($(opt).attr("value") || "").trim();
+          const label = $(opt).text().replace(/\s+/g, " ").trim();
+          const season = value.match(/\d+/)?.[0] || label.match(/season\s*(\d+)/i)?.[1];
+          if (!season) return;
+          seasonMap.set(season, {
+            title: label || \`Season \${season}\`,
+            episodesLink: \`\${seriesBase}?season=\${season}\`,
+          });
         });
       });
 
@@ -166,13 +183,31 @@ export const getMeta = async function ({
           });
         });
       } else {
-        // Fallback: single season entry
-        linkList.push({
-          title: "Season 1",
-          quality: "",
-          episodesLink: `${seriesBase}?season=1`,
-          directLinks: [],
+        // Infer seasons from canonical episode URLs when no season dropdown exists.
+        const seasonNumbers = new Set<string>();
+        $("a[href*='/season/'], [data-season]").each((_, node) => {
+          const href = String($(node).attr("href") || "");
+          const season = href.match(/\/season\/(\d+)/i)?.[1] ||
+            String($(node).attr("data-season") || "").match(/\d+/)?.[0];
+          if (season) seasonNumbers.add(season);
         });
+        if (seasonNumbers.size) {
+          Array.from(seasonNumbers).sort((a, b) => Number(a) - Number(b)).forEach((season) => {
+            linkList.push({
+              title: \`Season \${season}\`,
+              quality: "",
+              episodesLink: \`\${seriesBase}?season=\${season}\`,
+              directLinks: [],
+            });
+          });
+        } else {
+          linkList.push({
+            title: "Season 1",
+            quality: "",
+            episodesLink: \`\${seriesBase}?season=1\`,
+            directLinks: [],
+          });
+        }
       }
     } else {
       // Movie / single‑link behaviour
