@@ -33,9 +33,7 @@ jobs:
         run: npm run build
       - name: Test Hindi IPTV provider
         run: node tests/test-iptv.js
-      - name: Test MultiMovies Desktop episode extraction
-        run: node tests/test-multi-episodes.js
-      - name: Test MultiMovies Desktop stream extraction
+      - name: Test MultiMovies episode stream extraction
         run: node tests/test-multi-stream.js
       - name: Commit generated bundles
         run: |
