@@ -32,7 +32,7 @@ function extractAssignedObject(html: string, variable: string): any {
       else if (ch === quote) quote = "";
       continue;
     }
-    if (ch === '"' || ch === "'" || ch === "\`") { quote = ch; continue; }
+    if (ch === '"' || ch === "'" || ch === "`") { quote = ch; continue; }
     if (ch === "{") depth++;
     else if (ch === "}" && --depth === 0) {
       try { return JSON.parse(html.slice(start, i + 1)); } catch { return null; }
@@ -152,8 +152,8 @@ export const getMeta = async function ({
           const season = value.match(/\d+/)?.[0] || label.match(/season\s*(\d+)/i)?.[1];
           if (!season) return;
           seasonMap.set(season, {
-            title: label || \`Season \${season}\`,
-            episodesLink: \`\${seriesBase}?season=\${season}\`,
+            title: label || `Season ${season}`,
+            episodesLink: `${seriesBase}?season=${season}`,
           });
         });
       });
@@ -194,9 +194,9 @@ export const getMeta = async function ({
         if (seasonNumbers.size) {
           Array.from(seasonNumbers).sort((a, b) => Number(a) - Number(b)).forEach((season) => {
             linkList.push({
-              title: \`Season \${season}\`,
+              title: `Season ${season}`,
               quality: "",
-              episodesLink: \`\${seriesBase}?season=\${season}\`,
+              episodesLink: `${seriesBase}?season=${season}`,
               directLinks: [],
             });
           });
@@ -204,7 +204,7 @@ export const getMeta = async function ({
           linkList.push({
             title: "Season 1",
             quality: "",
-            episodesLink: \`\${seriesBase}?season=1\`,
+            episodesLink: `${seriesBase}?season=1`,
             directLinks: [],
           });
         }
