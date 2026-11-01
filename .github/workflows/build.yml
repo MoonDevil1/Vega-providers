@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -46,3 +46,15 @@ jobs:
           test -s dist/multi2/catalog.js
       - name: Run MultiMovies regression tests
         run: node tests/test-multi.js
+      - name: Commit generated provider bundles
+        if: github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dist/
+          if git diff --cached --quiet; then
+            echo "No generated bundle changes"
+          else
+            git commit -m "Build provider bundles"
+            git push
+          fi
