@@ -116,6 +116,13 @@ export const getBaseUrl = async (
   }
 
   const urls = await fetchProviderUrls();
+
+  // Multi 2 is a separate implementation of the upstream Multi provider.
+  // Keep its upstream domain independent from the MultiMovies provider.
+  if (providerValue === "multi2") {
+    return normaliseSiteUrl(urls.multi?.url || "") || "https://m1.multimovies.courses";
+  }
+
   const configured = normaliseSiteUrl(urls[providerValue]?.url || "");
   if (configured) return configured;
   return providerValue === "multi" ? "https://multimovies.wtf" : "";
