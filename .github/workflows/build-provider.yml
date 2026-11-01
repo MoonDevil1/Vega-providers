@@ -35,6 +35,9 @@ jobs:
         run: node tests/test-iptv.js
       - name: Test MultiMovies episode stream extraction
         run: node tests/test-multi-stream.js
+      - name: Verify Multi 2 bundle exports
+        run: |
+          node -e "const p=require('./dist/multi2/posts.js'); const m=require('./dist/multi2/meta.js'); const e=require('./dist/multi2/episodes.js'); const s=require('./dist/multi2/stream.js'); const c=require('./dist/multi2/catalog.js'); if(typeof p.getPosts!=='function'||typeof p.getSearchPosts!=='function'||typeof m.getMeta!=='function'||typeof e.getEpisodes!=='function'||typeof s.getStream!=='function'||!Array.isArray(c.catalog)) process.exit(1); console.log('Multi 2 bundle exports verified')"
       - name: Commit generated bundles
         run: |
           git config user.name "github-actions[bot]"
