@@ -40,7 +40,6 @@ type StreamEx = Stream & {
   headers?: Record<string, string>;
   quality?: string;
   subtitles?: any[];
-  preferredVariant?: boolean;
 };
 
 interface ServerEntry {
@@ -458,12 +457,7 @@ async function resolvePublicEmbed(
 
 /*  Media type detection                                               */
 /* ================================================================== */
-/* User preferences: prioritize a chosen server and requested quality.
- * Keep working fallbacks; preferences only change stream ordering. */
-function qualityNumber(value: any): number {
-  const match = String(value || "").match(/(?:^|\D)(2160|1440|1080|720|576|540|480|360)(?:p|\b)/i);
-  return match ? Number(match[1]) : 0;
-}
+/* User preference: prioritize the selected server while preserving all fallbacks. */
 function serverPreferenceMatches(server: string, preference: string): boolean {
   if (!preference || preference === "auto") return false;
   const name = String(server || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -471,111 +465,12 @@ function serverPreferenceMatches(server: string, preference: string): boolean {
   if (wanted === "gdmirror") return /gdmirror|googledrive|gd/.test(name);
   return name.includes(wanted);
 }
-function orderPreferredStreams(streams: StreamEx[], preferredServer: string, preferredQuality: string): StreamEx[] {
-  const targetQuality = preferredQuality === "auto" ? 0 : Number(preferredQuality);
+function orderPreferredStreams(streams: StreamEx[], preferredServer: string): StreamEx[] {
   return streams.map((stream, index) => ({ stream, index })).sort((a, b) => {
     const aServer = serverPreferenceMatches(a.stream.server, preferredServer) ? 0 : 1;
     const bServer = serverPreferenceMatches(b.stream.server, preferredServer) ? 0 : 1;
-    if (aServer !== bServer) return aServer - bServer;
-    // Start with the exact preferred rendition, then keep other renditions and the master.
-    const aVariant = a.stream.preferredVariant ? 0 : 1;
-    const bVariant = b.stream.preferredVariant ? 0 : 1;
-    if (aVariant !== bVariant) return aVariant - bVariant;
-    if (targetQuality) {
-      const aq = qualityNumber(a.stream.quality || a.stream.server);
-      const bq = qualityNumber(b.stream.quality || b.stream.server);
-      const ad = aq ? Math.abs(aq - targetQuality) : 9999;
-      const bd = bq ? Math.abs(bq - targetQuality) : 9999;
-      if (ad !== bd) return ad - bd;
-    }
-    return a.index - b.index;
+    return aServer - bServer || a.index - b.index;
   }).map((item) => item.stream);
-}
-
-/* Resolve an adaptive HLS master playlist to the requested rendition.
- * Vega's player otherwise receives the master URL and correctly chooses Auto. */
-async function selectHlsQuality(
-  streams: StreamEx[],
-  preferredQuality: string,
-  ctx: ProviderContext,
-): Promise<StreamEx[]> {
-  if (!preferredQuality || preferredQuality === "auto") return streams;
-  const target = Number(preferredQuality);
-  if (!Number.isFinite(target) || target <= 0) return streams;
-
-  const output: StreamEx[] = [];
-  for (const stream of streams) {
-    if (String(stream.type || "").toLowerCase() !== "m3u8" ||
-        !/\.m3u8(?:[?#]|$)/i.test(stream.link)) {
-      output.push(stream);
-      continue;
-    }
-    try {
-      const response = await ctx.axios.get(stream.link, {
-        headers: { ...(ctx.commonHeaders || {}), ...(stream.headers || {}), Accept: "*/*" },
-        timeout: 7000,
-        transformResponse: [(data: any) => data],
-      });
-      const playlist = String(response.data || "");
-      if (!playlist.includes("#EXT-X-STREAM-INF")) {
-        output.push(stream);
-        continue;
-      }
-
-      const lines = playlist.replace(/\r/g, "").split("\n");
-      const variants: Array<{ url: string; height: number; bandwidth: number }> = [];
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line.startsWith("#EXT-X-STREAM-INF:")) continue;
-        const attrs = line.slice("#EXT-X-STREAM-INF:".length);
-        const resolution = attrs.match(/(?:^|,)RESOLUTION=\d+x(\d+)/i);
-        const name = attrs.match(/(?:^|,)NAME="?((?:2160|1440|1080|720|576|540|480|360))p"?/i);
-        const height = Number(resolution?.[1] || name?.[1] || 0);
-        let uri = "";
-        for (let j = i + 1; j < lines.length; j++) {
-          const candidate = lines[j].trim();
-          if (candidate && !candidate.startsWith("#")) { uri = candidate; break; }
-        }
-        if (!uri || !height) continue;
-        try {
-          variants.push({
-            url: new URL(uri, stream.link).toString(),
-            height,
-            bandwidth: Number(attrs.match(/(?:^|,)BANDWIDTH=(\d+)/i)?.[1] || 0),
-          });
-        } catch {}
-      }
-
-      if (!variants.length) {
-        output.push(stream);
-        continue;
-      }
-
-      // Return every rendition as a selectable stream. The exact preference is first,
-      // while the untouched master remains available for the player's adaptive quality menu.
-      variants.sort((a, b) =>
-        Math.abs(a.height - target) - Math.abs(b.height - target) ||
-        b.height - a.height
-      );
-      for (const variant of variants) {
-        output.push({
-          ...stream,
-          server: stream.server + " (" + variant.height + "p)",
-          link: variant.url,
-          quality: String(variant.height),
-          preferredVariant: variant.height === target,
-        });
-      }
-      if (!variants.some((variant) => variant.height === target)) {
-        console.warn("[stream] requested " + target + "p rendition unavailable for " + stream.server);
-      }
-      output.push({ ...stream, server: stream.server + " (Auto - all qualities)", preferredVariant: false });
-    } catch (error: any) {
-      console.warn("[stream] HLS quality inspection failed for " + stream.server + ": " + (error?.message || error));
-      output.push(stream);
-    }
-  }
-  return output;
 }
 
 function detectMediaType(type: string, link: string, html: string): MediaType {
@@ -683,10 +578,8 @@ export async function getStream({
   if (servers.length === 0) return [];
 
   let preferredServer = "auto";
-  let preferredQuality = "auto";
   try {
     preferredServer = String(await providerContext.kvStore.get("multi_preferredServer") || "auto");
-    preferredQuality = String(await providerContext.kvStore.get("multi_preferredQuality") || "auto");
   } catch (error) {
     console.warn("[stream] preferences unavailable:", error);
   }
@@ -777,7 +670,6 @@ export async function getStream({
       if (ex.headers) merged.headers = ex.headers;
       if (ex.quality) merged.quality = ex.quality;
       if (ex.subtitles) merged.subtitles = ex.subtitles;
-      if (ex.preferredVariant) merged.preferredVariant = true;
       streamLinks.push(merged);
     }
   }
@@ -788,7 +680,6 @@ export async function getStream({
   );
 
   if (streamLinks.length === 0 && fallbacks.length > 0) return fallbacks;
-  const qualityStreams = await selectHlsQuality(streamLinks, preferredQuality, providerContext);
-  const ordered = orderPreferredStreams(qualityStreams, preferredServer, preferredQuality);
+  const ordered = orderPreferredStreams(streamLinks, preferredServer);
   return ordered as Stream[];
 }
