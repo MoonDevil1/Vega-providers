@@ -474,13 +474,13 @@ function serverPreferenceMatches(server: string, preference: string): boolean {
 function orderPreferredStreams(streams: StreamEx[], preferredServer: string, preferredQuality: string): StreamEx[] {
   const targetQuality = preferredQuality === "auto" ? 0 : Number(preferredQuality);
   return streams.map((stream, index) => ({ stream, index })).sort((a, b) => {
-    // Keep HLS master playlists first so Vega can expose every rendition in its quality menu.
-    const aVariant = a.stream.preferredVariant ? 1 : 0;
-    const bVariant = b.stream.preferredVariant ? 1 : 0;
-    if (aVariant !== bVariant) return aVariant - bVariant;
     const aServer = serverPreferenceMatches(a.stream.server, preferredServer) ? 0 : 1;
     const bServer = serverPreferenceMatches(b.stream.server, preferredServer) ? 0 : 1;
     if (aServer !== bServer) return aServer - bServer;
+    // Start with the exact preferred rendition, then keep other renditions and the master.
+    const aVariant = a.stream.preferredVariant ? 0 : 1;
+    const bVariant = b.stream.preferredVariant ? 0 : 1;
+    if (aVariant !== bVariant) return aVariant - bVariant;
     if (targetQuality) {
       const aq = qualityNumber(a.stream.quality || a.stream.server);
       const bq = qualityNumber(b.stream.quality || b.stream.server);
@@ -506,7 +506,7 @@ async function selectHlsQuality(
   const output: StreamEx[] = [];
   for (const stream of streams) {
     if (String(stream.type || "").toLowerCase() !== "m3u8" ||
-        !/\.m3u8(?:[?#]|$)/i.test(stream.link)) {
+        !/\\.m3u8(?:[?#]|$)/i.test(stream.link)) {
       output.push(stream);
       continue;
     }
@@ -522,14 +522,14 @@ async function selectHlsQuality(
         continue;
       }
 
-      const lines = playlist.replace(/\r/g, "").split("\n");
+      const lines = playlist.replace(/\\r/g, "").split("\\n");
       const variants: Array<{ url: string; height: number; bandwidth: number }> = [];
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line.startsWith("#EXT-X-STREAM-INF:")) continue;
         const attrs = line.slice("#EXT-X-STREAM-INF:".length);
-        const resolution = attrs.match(/(?:^|,)RESOLUTION=\d+x(\d+)/i);
-        const name = attrs.match(/(?:^|,)NAME="?(\d{3,4})p"?/i);
+        const resolution = attrs.match(/(?:^|,)RESOLUTION=\\d+x(\\d+)/i);
+        const name = attrs.match(/(?:^|,)NAME="?((?:2160|1440|1080|720|576|540|480|360))p"?/i);
         const height = Number(resolution?.[1] || name?.[1] || 0);
         let uri = "";
         for (let j = i + 1; j < lines.length; j++) {
@@ -541,28 +541,35 @@ async function selectHlsQuality(
           variants.push({
             url: new URL(uri, stream.link).toString(),
             height,
-            bandwidth: Number(attrs.match(/(?:^|,)BANDWIDTH=(\d+)/i)?.[1] || 0),
+            bandwidth: Number(attrs.match(/(?:^|,)BANDWIDTH=(\\d+)/i)?.[1] || 0),
           });
         } catch {}
       }
 
-      const selected = variants.find((variant) => variant.height === target);
-      if (selected) {
-        // Preserve the master playlist first: it contains every quality option
-        // used by Vega's in-player quality selector. Keep the preferred rendition
-        // as a secondary direct stream rather than replacing the master.
+      if (!variants.length) {
         output.push(stream);
+        continue;
+      }
+
+      // Return every rendition as a selectable stream. The exact preference is first,
+      // while the untouched master remains available for the player's adaptive quality menu.
+      variants.sort((a, b) =>
+        Math.abs(a.height - target) - Math.abs(b.height - target) ||
+        b.height - a.height
+      );
+      for (const variant of variants) {
         output.push({
           ...stream,
-          server: stream.server + " (" + target + "p)",
-          link: selected.url,
-          quality: String(target),
-          preferredVariant: true,
+          server: stream.server + " (" + variant.height + "p)",
+          link: variant.url,
+          quality: String(variant.height),
+          preferredVariant: variant.height === target,
         });
-      } else {
-        console.warn("[stream] requested " + target + "p rendition unavailable for " + stream.server);
-        output.push(stream);
       }
+      if (!variants.some((variant) => variant.height === target)) {
+        console.warn("[stream] requested " + target + "p rendition unavailable for " + stream.server);
+      }
+      output.push({ ...stream, preferredVariant: false });
     } catch (error: any) {
       console.warn("[stream] HLS quality inspection failed for " + stream.server + ": " + (error?.message || error));
       output.push(stream);
