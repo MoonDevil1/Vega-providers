@@ -506,7 +506,7 @@ async function selectHlsQuality(
   const output: StreamEx[] = [];
   for (const stream of streams) {
     if (String(stream.type || "").toLowerCase() !== "m3u8" ||
-        !/\\.m3u8(?:[?#]|$)/i.test(stream.link)) {
+        !/\.m3u8(?:[?#]|$)/i.test(stream.link)) {
       output.push(stream);
       continue;
     }
@@ -522,13 +522,13 @@ async function selectHlsQuality(
         continue;
       }
 
-      const lines = playlist.replace(/\\r/g, "").split("\\n");
+      const lines = playlist.replace(/\r/g, "").split("\n");
       const variants: Array<{ url: string; height: number; bandwidth: number }> = [];
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line.startsWith("#EXT-X-STREAM-INF:")) continue;
         const attrs = line.slice("#EXT-X-STREAM-INF:".length);
-        const resolution = attrs.match(/(?:^|,)RESOLUTION=\\d+x(\\d+)/i);
+        const resolution = attrs.match(/(?:^|,)RESOLUTION=\d+x(\d+)/i);
         const name = attrs.match(/(?:^|,)NAME="?((?:2160|1440|1080|720|576|540|480|360))p"?/i);
         const height = Number(resolution?.[1] || name?.[1] || 0);
         let uri = "";
@@ -541,7 +541,7 @@ async function selectHlsQuality(
           variants.push({
             url: new URL(uri, stream.link).toString(),
             height,
-            bandwidth: Number(attrs.match(/(?:^|,)BANDWIDTH=(\\d+)/i)?.[1] || 0),
+            bandwidth: Number(attrs.match(/(?:^|,)BANDWIDTH=(\d+)/i)?.[1] || 0),
           });
         } catch {}
       }
