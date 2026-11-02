@@ -7,7 +7,7 @@ async function getSettingsSchema() {
       key: "multi_preferredQuality",
       type: "select",
       label: "Preferred Video Quality",
-      description: "Prioritizes streams matching this resolution when the source exposes quality information. Auto keeps the source order.",
+      description: "Starts playback with the selected HLS rendition when available. Other renditions and the original Auto playlist remain available.",
       options: [
         { label: "Auto (Source Default)", value: "auto" },
         { label: "4K (2160p)", value: "2160" },
