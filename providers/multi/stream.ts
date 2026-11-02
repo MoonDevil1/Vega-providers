@@ -40,6 +40,7 @@ type StreamEx = Stream & {
   headers?: Record<string, string>;
   quality?: string;
   subtitles?: any[];
+  preferredVariant?: boolean;
 };
 
 interface ServerEntry {
@@ -473,6 +474,10 @@ function serverPreferenceMatches(server: string, preference: string): boolean {
 function orderPreferredStreams(streams: StreamEx[], preferredServer: string, preferredQuality: string): StreamEx[] {
   const targetQuality = preferredQuality === "auto" ? 0 : Number(preferredQuality);
   return streams.map((stream, index) => ({ stream, index })).sort((a, b) => {
+    // Keep HLS master playlists first so Vega can expose every rendition in its quality menu.
+    const aVariant = a.stream.preferredVariant ? 1 : 0;
+    const bVariant = b.stream.preferredVariant ? 1 : 0;
+    if (aVariant !== bVariant) return aVariant - bVariant;
     const aServer = serverPreferenceMatches(a.stream.server, preferredServer) ? 0 : 1;
     const bServer = serverPreferenceMatches(b.stream.server, preferredServer) ? 0 : 1;
     if (aServer !== bServer) return aServer - bServer;
@@ -543,14 +548,17 @@ async function selectHlsQuality(
 
       const selected = variants.find((variant) => variant.height === target);
       if (selected) {
+        // Preserve the master playlist first: it contains every quality option
+        // used by Vega's in-player quality selector. Keep the preferred rendition
+        // as a secondary direct stream rather than replacing the master.
+        output.push(stream);
         output.push({
           ...stream,
           server: stream.server + " (" + target + "p)",
           link: selected.url,
           quality: String(target),
+          preferredVariant: true,
         });
-        // Keep the original master as a fallback if the selected rendition fails.
-        output.push(stream);
       } else {
         console.warn("[stream] requested " + target + "p rendition unavailable for " + stream.server);
         output.push(stream);
