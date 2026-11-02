@@ -487,6 +487,82 @@ function orderPreferredStreams(streams: StreamEx[], preferredServer: string, pre
   }).map((item) => item.stream);
 }
 
+/* Resolve an adaptive HLS master playlist to the requested rendition.
+ * Vega's player otherwise receives the master URL and correctly chooses Auto. */
+async function selectHlsQuality(
+  streams: StreamEx[],
+  preferredQuality: string,
+  ctx: ProviderContext,
+): Promise<StreamEx[]> {
+  if (!preferredQuality || preferredQuality === "auto") return streams;
+  const target = Number(preferredQuality);
+  if (!Number.isFinite(target) || target <= 0) return streams;
+
+  const output: StreamEx[] = [];
+  for (const stream of streams) {
+    if (String(stream.type || "").toLowerCase() !== "m3u8" ||
+        !/\.m3u8(?:[?#]|$)/i.test(stream.link)) {
+      output.push(stream);
+      continue;
+    }
+    try {
+      const response = await ctx.axios.get(stream.link, {
+        headers: { ...(ctx.commonHeaders || {}), ...(stream.headers || {}), Accept: "*/*" },
+        timeout: 7000,
+        transformResponse: [(data: any) => data],
+      });
+      const playlist = String(response.data || "");
+      if (!playlist.includes("#EXT-X-STREAM-INF")) {
+        output.push(stream);
+        continue;
+      }
+
+      const lines = playlist.replace(/\r/g, "").split("\n");
+      const variants: Array<{ url: string; height: number; bandwidth: number }> = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line.startsWith("#EXT-X-STREAM-INF:")) continue;
+        const attrs = line.slice("#EXT-X-STREAM-INF:".length);
+        const resolution = attrs.match(/(?:^|,)RESOLUTION=\d+x(\d+)/i);
+        const name = attrs.match(/(?:^|,)NAME="?(\d{3,4})p"?/i);
+        const height = Number(resolution?.[1] || name?.[1] || 0);
+        let uri = "";
+        for (let j = i + 1; j < lines.length; j++) {
+          const candidate = lines[j].trim();
+          if (candidate && !candidate.startsWith("#")) { uri = candidate; break; }
+        }
+        if (!uri || !height) continue;
+        try {
+          variants.push({
+            url: new URL(uri, stream.link).toString(),
+            height,
+            bandwidth: Number(attrs.match(/(?:^|,)BANDWIDTH=(\d+)/i)?.[1] || 0),
+          });
+        } catch {}
+      }
+
+      const selected = variants.find((variant) => variant.height === target);
+      if (selected) {
+        output.push({
+          ...stream,
+          server: stream.server + " (" + target + "p)",
+          link: selected.url,
+          quality: String(target),
+        });
+        // Keep the original master as a fallback if the selected rendition fails.
+        output.push(stream);
+      } else {
+        console.warn("[stream] requested " + target + "p rendition unavailable for " + stream.server);
+        output.push(stream);
+      }
+    } catch (error: any) {
+      console.warn("[stream] HLS quality inspection failed for " + stream.server + ": " + (error?.message || error));
+      output.push(stream);
+    }
+  }
+  return output;
+}
+
 function detectMediaType(type: string, link: string, html: string): MediaType {
   const t = (type || "").toLowerCase();
   if (t.indexOf("tv") >= 0 || t.indexOf("series") >= 0 || t.indexOf("show") >= 0)
@@ -696,6 +772,7 @@ export async function getStream({
   );
 
   if (streamLinks.length === 0 && fallbacks.length > 0) return fallbacks;
-  const ordered = orderPreferredStreams(streamLinks, preferredServer, preferredQuality);
+  const qualityStreams = await selectHlsQuality(streamLinks, preferredQuality, providerContext);
+  const ordered = orderPreferredStreams(qualityStreams, preferredServer, preferredQuality);
   return ordered as Stream[];
 }
