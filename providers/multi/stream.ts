@@ -569,7 +569,7 @@ async function selectHlsQuality(
       if (!variants.some((variant) => variant.height === target)) {
         console.warn("[stream] requested " + target + "p rendition unavailable for " + stream.server);
       }
-      output.push({ ...stream, preferredVariant: false });
+      output.push({ ...stream, server: stream.server + " (Auto - all qualities)", preferredVariant: false });
     } catch (error: any) {
       console.warn("[stream] HLS quality inspection failed for " + stream.server + ": " + (error?.message || error));
       output.push(stream);
