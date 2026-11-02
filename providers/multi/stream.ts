@@ -770,6 +770,7 @@ export async function getStream({
       if (ex.headers) merged.headers = ex.headers;
       if (ex.quality) merged.quality = ex.quality;
       if (ex.subtitles) merged.subtitles = ex.subtitles;
+      if (ex.preferredVariant) merged.preferredVariant = true;
       streamLinks.push(merged);
     }
   }
