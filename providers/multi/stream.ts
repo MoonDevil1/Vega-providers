@@ -460,7 +460,7 @@ async function resolvePublicEmbed(
 /* User preferences: prioritize a chosen server and requested quality.
  * Keep working fallbacks; preferences only change stream ordering. */
 function qualityNumber(value: any): number {
-  const match = String(value || "").match(/(?:^|\\D)(2160|1440|1080|720|576|540|480|360)(?:p|\\b)/i);
+  const match = String(value || "").match(/(?:^|\D)(2160|1440|1080|720|576|540|480|360)(?:p|\b)/i);
   return match ? Number(match[1]) : 0;
 }
 function serverPreferenceMatches(server: string, preference: string): boolean {
