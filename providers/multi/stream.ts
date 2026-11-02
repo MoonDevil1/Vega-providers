@@ -457,6 +457,36 @@ async function resolvePublicEmbed(
 
 /*  Media type detection                                               */
 /* ================================================================== */
+/* User preferences: prioritize a chosen server and requested quality.
+ * Keep working fallbacks; preferences only change stream ordering. */
+function qualityNumber(value: any): number {
+  const match = String(value || "").match(/(?:^|\\D)(2160|1440|1080|720|576|540|480|360)(?:p|\\b)/i);
+  return match ? Number(match[1]) : 0;
+}
+function serverPreferenceMatches(server: string, preference: string): boolean {
+  if (!preference || preference === "auto") return false;
+  const name = String(server || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const wanted = preference.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (wanted === "gdmirror") return /gdmirror|googledrive|gd/.test(name);
+  return name.includes(wanted);
+}
+function orderPreferredStreams(streams: StreamEx[], preferredServer: string, preferredQuality: string): StreamEx[] {
+  const targetQuality = preferredQuality === "auto" ? 0 : Number(preferredQuality);
+  return streams.map((stream, index) => ({ stream, index })).sort((a, b) => {
+    const aServer = serverPreferenceMatches(a.stream.server, preferredServer) ? 0 : 1;
+    const bServer = serverPreferenceMatches(b.stream.server, preferredServer) ? 0 : 1;
+    if (aServer !== bServer) return aServer - bServer;
+    if (targetQuality) {
+      const aq = qualityNumber(a.stream.quality || a.stream.server);
+      const bq = qualityNumber(b.stream.quality || b.stream.server);
+      const ad = aq ? Math.abs(aq - targetQuality) : 9999;
+      const bd = bq ? Math.abs(bq - targetQuality) : 9999;
+      if (ad !== bd) return ad - bd;
+    }
+    return a.index - b.index;
+  }).map((item) => item.stream);
+}
+
 function detectMediaType(type: string, link: string, html: string): MediaType {
   const t = (type || "").toLowerCase();
   if (t.indexOf("tv") >= 0 || t.indexOf("series") >= 0 || t.indexOf("show") >= 0)
@@ -561,6 +591,21 @@ export async function getStream({
 
   if (servers.length === 0) return [];
 
+  let preferredServer = "auto";
+  let preferredQuality = "auto";
+  try {
+    preferredServer = String(await providerContext.kvStore.get("multi_preferredServer") || "auto");
+    preferredQuality = String(await providerContext.kvStore.get("multi_preferredQuality") || "auto");
+  } catch (error) {
+    console.warn("[stream] preferences unavailable:", error);
+  }
+  if (preferredServer !== "auto") {
+    servers = servers.slice().sort((a, b) =>
+      Number(serverPreferenceMatches(b.name, preferredServer)) -
+      Number(serverPreferenceMatches(a.name, preferredServer)) || a.index - b.index
+    );
+  }
+
   const mediaType = detectMediaType(type, pageUrl, html);
   console.log("[stream] media type=" + mediaType + "  starting parallel run");
 
@@ -651,5 +696,6 @@ export async function getStream({
   );
 
   if (streamLinks.length === 0 && fallbacks.length > 0) return fallbacks;
-  return streamLinks as Stream[];
+  const ordered = orderPreferredStreams(streamLinks, preferredServer, preferredQuality);
+  return ordered as Stream[];
 }
