@@ -25,7 +25,7 @@ function parseEpisodeAnchorsFromHtml(html: string, pageUrl: string): EpisodeLink
 
   const episodes: EpisodeLink[] = [];
   const seen = new Set<string>();
-  const anchors = Array.from(html.matchAll(/<a\\b([^>]*)>([\\s\\S]*?)<\\/a>/gi));
+  const anchors = Array.from(html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi));
 
   // Read title anchors before thumbnail anchors. The thumbnail badge often
   // contains only "E1", while the adjacent name anchor has the real title.
@@ -33,22 +33,22 @@ function parseEpisodeAnchorsFromHtml(html: string, pageUrl: string): EpisodeLink
     for (const match of anchors) {
       const attrs = match[1] || "";
       const inner = match[2] || "";
-      const className = attrs.match(/\\bclass\\s*=\\s*(["'])(.*?)\\1/i)?.[2] || "";
-      if (!new RegExp("(?:^|\\\\s)" + preferredClass + "(?:\\\\s|$)", "i").test(className)) continue;
+      const className = attrs.match(/\bclass\s*=\s*(["'])(.*?)\1/i)?.[2] || "";
+      if (!new RegExp("(?:^|\\s)" + preferredClass + "(?:\\s|$)", "i").test(className)) continue;
 
-      const rawHref = attrs.match(/\\bhref\\s*=\\s*(["'])(.*?)\\1/i)?.[2] || "";
+      const rawHref = attrs.match(/\bhref\s*=\s*(["'])(.*?)\1/i)?.[2] || "";
       const hrefText = decode(rawHref);
-      if (!hrefText || !/\\/season\\/\\d+\\/episode\\/\\d+/i.test(hrefText)) continue;
+      if (!hrefText || !/\/season\/\d+\/episode\/\d+/i.test(hrefText)) continue;
 
       let href = "";
       try { href = new URL(hrefText, pageUrl).toString(); } catch { continue; }
       if (seen.has(href)) continue;
 
       const rawTitle =
-        attrs.match(/\\b(?:title|aria-label)\\s*=\\s*(["'])(.*?)\\1/i)?.[2] ||
-        inner.match(/<img\\b[^>]*\\balt\\s*=\\s*(["'])(.*?)\\1/i)?.[2] ||
+        attrs.match(/\b(?:title|aria-label)\s*=\s*(["'])(.*?)\1/i)?.[2] ||
+        inner.match(/<img\b[^>]*\balt\s*=\s*(["'])(.*?)\1/i)?.[2] ||
         inner.replace(/<[^>]*>/g, " ");
-      const title = decode(rawTitle).replace(/\\s+/g, " ").trim() || "Episode " + (episodes.length + 1);
+      const title = decode(rawTitle).replace(/\s+/g, " ").trim() || "Episode " + (episodes.length + 1);
       seen.add(href);
       episodes.push({ title, link: href });
     }
