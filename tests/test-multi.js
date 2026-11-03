@@ -164,7 +164,7 @@ const providerContext = {
 
   const partialRangeEpisodes = await getEpisodes({ url: seriesUrl + "?season=5", providerContext });
   assert.equal(partialRangeEpisodes.length, 1, "a failed optional range must not discard episodes from the initial page");
-  assert.equal(partialRangeEpisodes[0].title, "E1 First range must survive");
+  assert.equal(partialRangeEpisodes[0].title, "First range must survive");
 
   console.log("MultiMovies regression tests passed: season parsing, range pagination, alternate markup, and partial-range resilience.");
 })().catch((error) => {
