@@ -170,8 +170,6 @@ function parseEpisodes(html: string, pageUrl: string, season: string, cheerio: a
       const title = dataMatch[0].match(/\b(?:title|aria-label)\s*=\s*(["'])(.*?)\1/i)?.[2] || "";
       addCandidate(dataMatch[2], title);
     }
-      addCandidate(dataMatch[2], title);
-    }
   }
   return episodes;
 }
