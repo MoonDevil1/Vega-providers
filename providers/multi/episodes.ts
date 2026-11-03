@@ -13,7 +13,53 @@ function getEpisodeNumber(episode: EpisodeLink): number {
   return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
 }
 
+function parseEpisodeAnchorsFromHtml(html: string, pageUrl: string): EpisodeLink[] {
+  const decode = (value: string) => String(value || "")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#x2f;/gi, "/")
+    .replace(/&#47;/gi, "/")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&nbsp;/gi, " ")
+    .trim();
+
+  const episodes: EpisodeLink[] = [];
+  const seen = new Set<string>();
+  const anchors = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  let match: RegExpExecArray | null;
+
+  // Prefer actual episode-card links instead of relying on Desktop's
+  // QuickJS Cheerio selector implementation.
+  while ((match = anchors.exec(html))) {
+    const attrs = match[1] || "";
+    const inner = match[2] || "";
+    const className = attrs.match(/\bclass\s*=\s*(["'])(.*?)\1/i)?.[2] || "";
+    if (!/(?:^|\s)(?:cinejoy-ep-thumb-link|cinejoy-ep-name|episode-link)(?:\s|$)/i.test(className)) continue;
+
+    const rawHref = attrs.match(/\bhref\s*=\s*(["'])(.*?)\1/i)?.[2] || "";
+    const hrefText = decode(rawHref);
+    if (!hrefText || !/\/season\/\d+\/episode\/\d+/i.test(hrefText)) continue;
+
+    let href = "";
+    try { href = new URL(hrefText, pageUrl).toString(); } catch { continue; }
+    if (seen.has(href)) continue;
+
+    const rawTitle =
+      attrs.match(/\b(?:title|aria-label)\s*=\s*(["'])(.*?)\1/i)?.[2] ||
+      inner.match(/<img\b[^>]*\balt\s*=\s*(["'])(.*?)\1/i)?.[2] ||
+      inner.replace(/<[^>]*>/g, " ");
+    const title = decode(rawTitle).replace(/\s+/g, " ").trim() || "Episode " + (episodes.length + 1);
+    seen.add(href);
+    episodes.push({ title, link: href });
+  }
+
+  return episodes;
+}
+
 function parseEpisodes(html: string, pageUrl: string, season: string, cheerio: any): EpisodeLink[] {
+  const rawCardEpisodes = parseEpisodeAnchorsFromHtml(html, pageUrl);
+  if (rawCardEpisodes.length) return rawCardEpisodes;
+
   const $ = cheerio.load(html);
   let grid = season ? $(`#cinejoy-season-${season}`) : $(".cinejoy-season-grid.active").first();
   if (!grid.length) grid = $(".cinejoy-season-grid.active").first();
@@ -279,9 +325,21 @@ export const getEpisodes = async function ({
       }
     }
 
-    return all.sort((a, b) => getEpisodeNumber(a) - getEpisodeNumber(b));
+    const sorted = all.sort((a, b) => getEpisodeNumber(a) - getEpisodeNumber(b));
+    if (sorted.length) return sorted;
+
+    const markers = {
+      cinejoyGrid: initialHtml.includes("cinejoy-season-grid"),
+      cinejoyCards: initialHtml.includes("cinejoy-ep-card"),
+      episodeLinks: /\\/season\\/\\d+\\/episode\\/\\d+/i.test(initialHtml),
+      challengePage: /cloudflare|checking your browser|verify you are human|access denied/i.test(initialHtml),
+    };
+    throw new Error(
+      `No episodes parsed for ${inputUrl.toString()} (HTTP ${response.status || "unknown"}, HTML ${initialHtml.length} chars, markers ${JSON.stringify(markers)})`,
+    );
   } catch (error) {
-    console.warn("[MultiMovies] getEpisodes failed:", error);
-    return [];
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn("[MultiMovies] getEpisodes failed:", message);
+    throw new Error(`MultiMovies episodes: ${message}`);
   }
 };
