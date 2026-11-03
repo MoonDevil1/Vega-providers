@@ -67,6 +67,18 @@ const alternateDesktopMarkupPage =
   '<a data-url="/series/test-show/season/4/episode/10" aria-label="Episode 10: Data URL">Open</a>' +
   '</section></body></html>';
 
+const singleSeasonNoSelectPage =
+  '<html><body>' +
+  '<h1 class="cinejoy-detail-title">The Perfect Lie</h1>' +
+  '<div class="cinejoy-detail-overview">A live-layout fixture.</div>' +
+  '<div class="cinejoy-season-pill">Season 1</div>' +
+  '<div class="cinejoy-season-grid active" id="cinejoy-season-1">' +
+  '<div class="cinejoy-ep-card" id="ep-item-1-1">' +
+  '<a class="cinejoy-ep-thumb-link" href="https://m1.multimovies.courses/series/the-perfect-lie/season/1/episode/1">' +
+  '<span class="cinejoy-ep-badge-num">E1</span></a>' +
+  '<a class="cinejoy-ep-name" title="Date" href="https://m1.multimovies.courses/series/the-perfect-lie/season/1/episode/1">Date</a>' +
+  '</div></div></body></html>';
+
 const episodeRequests = [];
 const platformUserAgent = "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36";
 
@@ -85,6 +97,7 @@ const providerContext = {
       if (parsed.pathname === "/series/test-show" && season === "2") return { data: secondSeason, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "3") return { data: legacyDownloadLinksPage, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "4") return { data: alternateDesktopMarkupPage, status: 200 };
+      if (parsed.pathname === "/series/the-perfect-lie") return { data: singleSeasonNoSelectPage, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "5" && !range) return { data: partialRangeSeason, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "5" && range === "3") throw new Error("Secondary range unavailable in Desktop runtime");
       throw new Error("Unexpected URL: " + url);
@@ -130,6 +143,14 @@ const providerContext = {
   assert.equal(alternateMarkupEpisodes[0].link, seriesUrl + "/season/4/episode/9");
   assert.match(alternateMarkupEpisodes[0].title, /Episode 9: Alternate markup/);
   assert.equal(alternateMarkupEpisodes[1].link, seriesUrl + "/season/4/episode/10");
+
+  const liveLayoutMeta = await getMeta({ link: base + "/series/the-perfect-lie", providerContext });
+  assert.equal(liveLayoutMeta.title, "The Perfect Lie");
+  assert.equal(liveLayoutMeta.type, "series");
+  assert.equal(liveLayoutMeta.linkList.length, 1, "single-season pill layout should still expose one season");
+  const liveLayoutEpisodes = await getEpisodes({ url: base + "/series/the-perfect-lie?season=1", providerContext });
+  assert.equal(liveLayoutEpisodes.length, 1, "current single-season layout without a select must return its episode");
+  assert.equal(liveLayoutEpisodes[0].link, base + "/series/the-perfect-lie/season/1/episode/1");
 
   const partialRangeEpisodes = await getEpisodes({ url: seriesUrl + "?season=5", providerContext });
   assert.equal(partialRangeEpisodes.length, 1, "a failed optional range must not discard episodes from the initial page");
