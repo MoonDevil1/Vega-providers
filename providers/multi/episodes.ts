@@ -249,7 +249,7 @@ export const getEpisodes = async function ({
     const ranges: string[] = [];
     $("#episodeRange option, #episodeRangeSelect option").each((_index: number, option: any) => {
       const value = clean($(option).attr("value"));
-      if (/^\\d+$/.test(value) && !ranges.includes(value)) ranges.push(value);
+      if (/^\d+$/.test(value) && !ranges.includes(value)) ranges.push(value);
     });
     const initialRange =
       inputUrl.searchParams.get("ep_range") ||
