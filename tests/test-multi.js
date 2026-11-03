@@ -49,6 +49,11 @@ const secondSeason = seasonPage({
   season: 2,
   episodes: [{ number: 4, name: "Season Two Premiere" }],
 });
+const partialRangeSeason = seasonPage({
+  season: 5,
+  episodes: [{ number: 1, name: "First range must survive" }],
+  ranges: [1, 3],
+});
 
 const legacyDownloadLinksPage =
   '<html><body><div class="entry-content">' +
@@ -80,6 +85,8 @@ const providerContext = {
       if (parsed.pathname === "/series/test-show" && season === "2") return { data: secondSeason, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "3") return { data: legacyDownloadLinksPage, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "4") return { data: alternateDesktopMarkupPage, status: 200 };
+      if (parsed.pathname === "/series/test-show" && season === "5" && !range) return { data: partialRangeSeason, status: 200 };
+      if (parsed.pathname === "/series/test-show" && season === "5" && range === "3") throw new Error("Secondary range unavailable in Desktop runtime");
       throw new Error("Unexpected URL: " + url);
     },
   },
@@ -124,7 +131,11 @@ const providerContext = {
   assert.match(alternateMarkupEpisodes[0].title, /Episode 9: Alternate markup/);
   assert.equal(alternateMarkupEpisodes[1].link, seriesUrl + "/season/4/episode/10");
 
-  console.log("MultiMovies regression tests passed: season parsing, episode-range pagination, and alternate desktop markup.");
+  const partialRangeEpisodes = await getEpisodes({ url: seriesUrl + "?season=5", providerContext });
+  assert.equal(partialRangeEpisodes.length, 1, "a failed optional range must not discard episodes from the initial page");
+  assert.equal(partialRangeEpisodes[0].title, "E1 First range must survive");
+
+  console.log("MultiMovies regression tests passed: season parsing, range pagination, alternate markup, and partial-range resilience.");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;
