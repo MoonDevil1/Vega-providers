@@ -141,12 +141,12 @@ function parseEpisodes(html: string, pageUrl: string, season: string, cheerio: a
         .trim();
     const addCandidate = (rawHref: string, rawTitle: string) => {
       const decodedHref = decodeHtml(rawHref);
-      if (!decodedHref || !/\\/season\\/\\d+\\/episode\\/\\d+/i.test(decodedHref)) return;
+      if (!decodedHref || !/\/season\/\d+\/episode\/\d+/i.test(decodedHref)) return;
       let href = "";
       try { href = new URL(decodedHref, pageUrl).toString(); } catch { return; }
       if (seen.has(href)) return;
       const title = decodeHtml(rawTitle.replace(/<[^>]*>/g, " "))
-        .replace(/\\s+/g, " ")
+        .replace(/\s+/g, " ")
         .trim() || `Episode ${episodes.length + 1}`;
       seen.add(href);
       episodes.push({ title, link: href });
@@ -154,19 +154,19 @@ function parseEpisodes(html: string, pageUrl: string, season: string, cheerio: a
 
     // Match opening anchors independently of their closing markup. This is
     // deliberately tolerant of nested/rewritten HTML from the site.
-    const anchors = /<a\\b([^>]*)>/gi;
+    const anchors = /<a\b([^>]*)>/gi;
     let anchorMatch: RegExpExecArray | null;
     while ((anchorMatch = anchors.exec(html))) {
       const attrs = anchorMatch[1] || "";
-      const href = attrs.match(/\\b(?:href|data-href|data-url|data-episode-url)\\s*=\\s*(["'])(.*?)\\1/i)?.[2] || "";
+      const href = attrs.match(/\b(?:href|data-href|data-url|data-episode-url)\s*=\s*(["'])(.*?)\1/i)?.[2] || "";
       const title =
-        attrs.match(/\\b(?:title|aria-label)\\s*=\\s*(["'])(.*?)\\1/i)?.[2] || "";
+        attrs.match(/\b(?:title|aria-label)\s*=\s*(["'])(.*?)\1/i)?.[2] || "";
       addCandidate(href, title);
     }
 
-    // Some pages expose episode URLs on card attributes instead of anchors.
+    const dataUrls = /<[^>]+\bdata-episode-url\s*=\s*(["'])(.*?)\1[^>]*>/gi;
     const dataUrls = /<[^>]+\\bdata-episode-url\\s*=\\s*(["'])(.*?)\\1[^>]*>/gi;
-    let dataMatch: RegExpExecArray | null;
+      const title = dataMatch[0].match(/\b(?:title|aria-label)\s*=\s*(["'])(.*?)\1/i)?.[2] || "";
     while ((dataMatch = dataUrls.exec(html))) {
       const title = dataMatch[0].match(/\\b(?:title|aria-label)\\s*=\\s*(["'])(.*?)\\1/i)?.[2] || "";
       addCandidate(dataMatch[2], title);
