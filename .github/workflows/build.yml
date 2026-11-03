@@ -11,6 +11,7 @@ on:
       - "package.json"
       - "package-lock.json"
       - "tests/test-multi.js"
+      - "tests/test-multi-stream.js"
       - ".github/workflows/build.yml"
   workflow_dispatch:
 
@@ -43,15 +44,8 @@ jobs:
         run: node tests/test-multi.js
       - name: Run MultiMovies stream regression tests
         run: node tests/test-multi-stream.js
-      - name: Commit generated provider bundles
-        if: github.event_name == 'push'
+      - name: Validate generated JavaScript syntax
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dist/
-          if git diff --cached --quiet; then
-            echo "No generated bundle changes"
-          else
-            git commit -m "Build provider bundles"
-            git push
-          fi
+          for file in dist/multi/catalog.js dist/multi/posts.js dist/multi/meta.js dist/multi/episodes.js dist/multi/stream.js; do
+            node --check "$file"
+          done
