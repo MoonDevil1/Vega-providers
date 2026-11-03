@@ -39,8 +39,10 @@ jobs:
           test -s dist/multi/stream.js
           test -s dist/multi/episodes.js
           test -s dist/multi/catalog.js
-      - name: Run MultiMovies regression tests
+      - name: Run MultiMovies episode regression tests
         run: node tests/test-multi.js
+      - name: Run MultiMovies stream regression tests
+        run: node tests/test-multi-stream.js
       - name: Commit generated provider bundles
         if: github.event_name == 'push'
         run: |
