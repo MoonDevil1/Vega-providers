@@ -47,7 +47,7 @@ const LOGOS: Record<string, string> = {
 type ChannelEntry = { id: string; feed: string; name: string; logo: string; url: string; headers: Record<string, string> };
 
 function attr(line: string, key: string): string {
-  const match = line.match(new RegExp("(?:^|\\s)" + key + "=(?:\\"([^\\"]*)\\"|'([^']*)')", "i"));
+  const match = line.match(new RegExp("(?:^|\\s)" + key + "=(?:\"([^\"]*)\"|'([^']*)')", "i"));
   return match ? String(match[1] || match[2] || "").trim() : "";
 }
 function canonicalId(id: string): string { return String(id || "").trim().split("@")[0].toLowerCase(); }
