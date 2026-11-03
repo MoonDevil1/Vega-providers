@@ -331,7 +331,7 @@ export const getEpisodes = async function ({
     const markers = {
       cinejoyGrid: initialHtml.includes("cinejoy-season-grid"),
       cinejoyCards: initialHtml.includes("cinejoy-ep-card"),
-      episodeLinks: /\\/season\\/\\d+\\/episode\\/\\d+/i.test(initialHtml),
+      episodeLinks: /\/season\/\d+\/episode\/\d+/i.test(initialHtml),
       challengePage: /cloudflare|checking your browser|verify you are human|access denied/i.test(initialHtml),
     };
     throw new Error(
