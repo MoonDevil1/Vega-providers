@@ -127,10 +127,9 @@ function parseEpisodes(html: string, pageUrl: string, season: string, cheerio: a
     });
   }
 
-  // Last-resort parser for QuickJS/desktop builds where the HTML parser may
-  // not expose the same selector tree as the mobile runtime. Read episode URLs
-  // directly from anchor attributes instead of depending on a particular card
-  // class or nested DOM structure.
+  // Last-resort parser for Desktop/QuickJS. Read href attributes directly:
+  // the live site can return the right HTML while a lightweight DOM selector
+  // implementation fails to expose nested episode cards consistently.
   if (!episodes.length) {
     const decodeHtml = (value: string) =>
       String(value || "")
@@ -142,40 +141,37 @@ function parseEpisodes(html: string, pageUrl: string, season: string, cheerio: a
         .trim();
     const addCandidate = (rawHref: string, rawTitle: string) => {
       const decodedHref = decodeHtml(rawHref);
-      if (!decodedHref || !/\/episode\//i.test(decodedHref)) return;
+      if (!decodedHref || !/\\/season\\/\\d+\\/episode\\/\\d+/i.test(decodedHref)) return;
       let href = "";
       try { href = new URL(decodedHref, pageUrl).toString(); } catch { return; }
       if (seen.has(href)) return;
       const title = decodeHtml(rawTitle.replace(/<[^>]*>/g, " "))
-        .replace(/\s+/g, " ")
+        .replace(/\\s+/g, " ")
         .trim() || `Episode ${episodes.length + 1}`;
       seen.add(href);
       episodes.push({ title, link: href });
     };
 
-    const anchors = /<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi;
+    // Match opening anchors independently of their closing markup. This is
+    // deliberately tolerant of nested/rewritten HTML from the site.
+    const anchors = /<a\\b([^>]*)>/gi;
     let anchorMatch: RegExpExecArray | null;
     while ((anchorMatch = anchors.exec(html))) {
       const attrs = anchorMatch[1] || "";
-      const href =
-        attrs.match(/\b(?:href|data-href|data-url|data-episode-url)\s*=\s*["']([^"']+)["']/i)?.[1] || "";
+      const href = attrs.match(/\\b(?:href|data-href|data-url|data-episode-url)\\s*=\\s*(["'])(.*?)\\1/i)?.[2] || "";
       const title =
-        attrs.match(/\b(?:title|aria-label)\s*=\s*["']([^"']+)["']/i)?.[1] ||
-        anchorMatch[2] ||
-        "";
+        attrs.match(/\\b(?:title|aria-label)\\s*=\\s*(["'])(.*?)\\1/i)?.[2] || "";
       addCandidate(href, title);
     }
 
-    // Some themes attach the episode URL to a non-anchor card element.
-    const dataUrls = /<[^>]+\bdata-episode-url\s*=\s*["']([^"']+)["'][^>]*>/gi;
+    // Some pages expose episode URLs on card attributes instead of anchors.
+    const dataUrls = /<[^>]+\\bdata-episode-url\\s*=\\s*(["'])(.*?)\\1[^>]*>/gi;
     let dataMatch: RegExpExecArray | null;
     while ((dataMatch = dataUrls.exec(html))) {
-      const title =
-        dataMatch[0].match(/\b(?:title|aria-label)\s*=\s*["']([^"']+)["']/i)?.[1] || "";
-      addCandidate(dataMatch[1], title);
+      const title = dataMatch[0].match(/\\b(?:title|aria-label)\\s*=\\s*(["'])(.*?)\\1/i)?.[2] || "";
+      addCandidate(dataMatch[2], title);
     }
   }
-
   return episodes;
 }
 
@@ -228,15 +224,34 @@ export const getEpisodes = async function ({
     );
     const order = inputUrl.searchParams.get("ep_order") || "oldest";
 
+    // Parse the HTML returned for the selected season first. Never discard
+    // these episodes just because an optional later range request fails.
+    const firstPageEpisodes = parseEpisodes(
+      initialHtml,
+      inputUrl.toString(),
+      selectedSeason,
+      cheerio,
+    );
+    const all: EpisodeLink[] = [];
+    const seen = new Set<string>();
+    const addEpisodes = (batch: EpisodeLink[]) => {
+      for (const episode of batch) {
+        if (!episode?.link || seen.has(episode.link)) continue;
+        seen.add(episode.link);
+        all.push(episode);
+      }
+    };
+    addEpisodes(firstPageEpisodes);
+
     // The live site paginates long seasons with #episodeRangeSelect and
-    // ?season=N&ep_range=FIRST_EP&ep_order=oldest. Fetch each range so Vega
-    // receives one complete season list rather than only the visible batch.
+    // ?season=N&ep_range=FIRST_EP&ep_order=oldest. Fetch remaining ranges
+    // sequentially: Desktop's sandbox has a strict RPC budget, and one failed
+    // secondary range must not turn a valid first page into an empty season.
     const ranges: string[] = [];
     $("#episodeRange option, #episodeRangeSelect option").each((_index: number, option: any) => {
       const value = clean($(option).attr("value"));
-      if (/^\d+$/.test(value) && !ranges.includes(value)) ranges.push(value);
+      if (/^\\d+$/.test(value) && !ranges.includes(value)) ranges.push(value);
     });
-
     const initialRange =
       inputUrl.searchParams.get("ep_range") ||
       clean($("#episodeRange option[selected], #episodeRangeSelect option[selected]").first().attr("value")) ||
@@ -244,45 +259,24 @@ export const getEpisodes = async function ({
       ranges[0] ||
       "";
 
-    if (!ranges.length) {
-      return parseEpisodes(initialHtml, inputUrl.toString(), selectedSeason, cheerio)
-        .sort((a, b) => getEpisodeNumber(a) - getEpisodeNumber(b));
-    }
-
-    const all: EpisodeLink[] = [];
-    const seen = new Set<string>();
-
-    // Vega Desktop's isolated provider runtime limits concurrent host RPC
-    // requests. Fetch range pages in small batches instead of firing every
-    // range at once (long seasons can expose more than 16 ranges).
-    const rangeConcurrency = 4;
-    for (let start = 0; start < ranges.length; start += rangeConcurrency) {
-      const rangeBatch = ranges.slice(start, start + rangeConcurrency);
-      const pageJobs = rangeBatch.map(async (range) => {
-        if (range === initialRange) {
-          return parseEpisodes(initialHtml, inputUrl.toString(), selectedSeason, cheerio);
-        }
+    for (const range of ranges) {
+      if (range === initialRange) continue;
+      try {
         const pageUrl = buildRangeUrl(inputUrl, selectedSeason, range, order);
-        try {
-          const pageResponse = await axios.get(pageUrl, {
-            headers: requestHeaders,
-            timeout: 15000,
-            maxRedirects: 5,
-          });
-          return parseEpisodes(String(pageResponse.data || ""), pageUrl, selectedSeason, cheerio);
-        } catch (error) {
-          console.warn("[MultiMovies] episode range request failed:", pageUrl, error);
-          return [];
-        }
-      });
-
-      const batches = await Promise.all(pageJobs);
-      for (const batch of batches) {
-        for (const episode of batch) {
-          if (seen.has(episode.link)) continue;
-          seen.add(episode.link);
-          all.push(episode);
-        }
+        const pageResponse = await axios.get(pageUrl, {
+          headers: requestHeaders,
+          timeout: 15000,
+          maxRedirects: 5,
+        });
+        const rangeEpisodes = parseEpisodes(
+          String(pageResponse.data || ""),
+          pageUrl,
+          selectedSeason,
+          cheerio,
+        );
+        addEpisodes(rangeEpisodes);
+      } catch (error) {
+        console.warn("[MultiMovies] optional episode range failed; keeping episodes already parsed:", range, error);
       }
     }
 
