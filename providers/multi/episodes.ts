@@ -165,10 +165,11 @@ function parseEpisodes(html: string, pageUrl: string, season: string, cheerio: a
     }
 
     const dataUrls = /<[^>]+\bdata-episode-url\s*=\s*(["'])(.*?)\1[^>]*>/gi;
-    const dataUrls = /<[^>]+\\bdata-episode-url\\s*=\\s*(["'])(.*?)\\1[^>]*>/gi;
-      const title = dataMatch[0].match(/\b(?:title|aria-label)\s*=\s*(["'])(.*?)\1/i)?.[2] || "";
+    let dataMatch: RegExpExecArray | null;
     while ((dataMatch = dataUrls.exec(html))) {
-      const title = dataMatch[0].match(/\\b(?:title|aria-label)\\s*=\\s*(["'])(.*?)\\1/i)?.[2] || "";
+      const title = dataMatch[0].match(/\b(?:title|aria-label)\s*=\s*(["'])(.*?)\1/i)?.[2] || "";
+      addCandidate(dataMatch[2], title);
+    }
       addCandidate(dataMatch[2], title);
     }
   }
