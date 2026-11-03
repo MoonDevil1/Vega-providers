@@ -1,3 +1,4 @@
+// Rebuild marker: regenerate the published Desktop bundle from this source.
 
 import { Stream, ProviderContext } from "../types";
 import { iqstExtractor } from "../extractors/iqst";
