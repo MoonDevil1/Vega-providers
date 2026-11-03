@@ -55,6 +55,9 @@ const partialRangeSeason = seasonPage({
   ranges: [1, 3],
 });
 
+const blockedSeasonPage =
+  '<html><body><title>Just a moment...</title><h1>Checking your browser</h1></body></html>';
+
 const legacyDownloadLinksPage =
   '<html><body><div class="entry-content">' +
   '<h5>Episode 1: Pilot</h5>' +
@@ -98,6 +101,7 @@ const providerContext = {
       if (parsed.pathname === "/series/test-show" && season === "3") return { data: legacyDownloadLinksPage, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "4") return { data: alternateDesktopMarkupPage, status: 200 };
       if (parsed.pathname === "/series/the-perfect-lie") return { data: singleSeasonNoSelectPage, status: 200 };
+      if (parsed.pathname === "/series/test-show" && season === "6") return { data: blockedSeasonPage, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "5" && !range) return { data: partialRangeSeason, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "5" && range === "3") throw new Error("Secondary range unavailable in Desktop runtime");
       throw new Error("Unexpected URL: " + url);
@@ -151,6 +155,12 @@ const providerContext = {
   const liveLayoutEpisodes = await getEpisodes({ url: base + "/series/the-perfect-lie?season=1", providerContext });
   assert.equal(liveLayoutEpisodes.length, 1, "current single-season layout without a select must return its episode");
   assert.equal(liveLayoutEpisodes[0].link, base + "/series/the-perfect-lie/season/1/episode/1");
+
+  await assert.rejects(
+    getEpisodes({ url: seriesUrl + "?season=6", providerContext }),
+    /No episodes parsed.*challengePage.*true/,
+    "Desktop should expose a blocked/empty response instead of silently returning an empty list",
+  );
 
   const partialRangeEpisodes = await getEpisodes({ url: seriesUrl + "?season=5", providerContext });
   assert.equal(partialRangeEpisodes.length, 1, "a failed optional range must not discard episodes from the initial page");
