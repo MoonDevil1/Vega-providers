@@ -19,7 +19,7 @@ const headers = {
 };
 
 function extractAssignedObject(html: string, variable: string): any {
-  const match = new RegExp("(?:const|let|var)\\s+" + variable + "\\s*=\\s*", "m").exec(html);
+  const match = new RegExp("(?:const|let|var)\s+" + variable + "\s*=\s*", "m").exec(html);
   if (!match) return null;
   const start = html.indexOf("{", match.index + match[0].length);
   if (start < 0) return null;
@@ -85,7 +85,7 @@ export const getMeta = async function ({
 
     // Title
     const ogTitle = String($('meta[property="og:title"]').attr("content") || $('meta[name="twitter:title"]').attr("content") || "")
-      .replace(/\\s*[-|]\\s*MultiMovies(?:\\s+\\d+(?:\\.\\d+)*)?\\s*$/i, "")
+      .replace(/\s*[-|]\s*MultiMovies(?:\s+\\d+(?:\.\\d+)*)?\s*$/i, "")
       .trim();
     result.title =
       watchItem?.title?.toString().trim() ||
