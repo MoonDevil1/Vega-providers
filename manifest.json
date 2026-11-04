@@ -2,19 +2,10 @@
   {
     "display_name": "MultiMovies",
     "value": "multi",
-    "version": "1.6.11",
-    "icon": "https://cdn.jsdelivr.net/gh/MoonDevil1/Vega-providers@main/assets/multimovies.svg",
+    "version": "1.6.12",
+    "icon": "https://m1.multimovies.courses/assets/img/logo.png",
     "type": "global",
     "hasSettings": true,
-    "disabled": false
-  },
-  {
-    "display_name": "Hindi IPTV",
-    "value": "iptv",
-    "version": "1.0.3",
-    "icon": "https://cdn.jsdelivr.net/gh/MoonDevil1/Vega-providers@main/assets/iptv.svg",
-    "type": "global",
-    "hasSettings": false,
     "disabled": false
   }
 ]
