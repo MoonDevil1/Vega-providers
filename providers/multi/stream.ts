@@ -653,7 +653,9 @@ export async function getStream({
   for (let i = 0; i < settled.length; i++) {
     const { server, streams } = settled[i];
     if (streams.length === 0) {
-      if (/rozgarlelo\.modiplay\.xyz\/embed\//i.test(server.url) || /streams\.iqsmartgames\.com\/embed\//i.test(server.url)) continue;
+      // Match the shared Vega provider convention: retain the original embed
+      // as a fallback when an extractor cannot resolve it in this runtime.
+      // Desktop and Mobile may differ in request support or timing.
       fallbacks.push({
         server: server.name + " (embed)",
         link: server.url,
