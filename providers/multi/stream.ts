@@ -109,28 +109,26 @@ function parseServersCheerio(html: string, cheerio: any): ServerEntry[] {
     "button[data-url]",
   ];
 
-  let nodes: any = null;
+  // Collect all matching selectors; do not stop at the first active-server subset.
   for (let i = 0; i < selectors.length; i++) {
     try {
-      const found = $(selectors[i]);
-      if (found && found.length > 0) { nodes = found; break; }
+      const nodes = $(selectors[i]);
+      if (!nodes || nodes.length === 0) continue;
+      nodes.each(function (this: any, _i: number, el: any) {
+        try {
+          const $el = $(el);
+          const url = String($el.attr("data-url") || "").trim();
+          if (!url) return;
+          const id = String($el.attr("data-id") || "");
+          const index = parseInt(String($el.attr("data-server-index") || "0"), 10) || 0;
+          let name = "";
+          try { name = String($el.find(".server-name").text() || "").trim(); } catch {}
+          if (!name) name = id || "Server";
+          out.push({ id, name, url, index });
+        } catch {}
+      });
     } catch {}
   }
-  if (!nodes) return out;
-
-  nodes.each(function (this: any, _i: number, el: any) {
-    try {
-      const $el = $(el);
-      const url = String($el.attr("data-url") || "").trim();
-      if (!url) return;
-      const id = String($el.attr("data-id") || "");
-      const index = parseInt(String($el.attr("data-server-index") || "0"), 10) || 0;
-      let name = "";
-      try { name = String($el.find(".server-name").text() || "").trim(); } catch {}
-      if (!name) name = id || "Server";
-      out.push({ id, name, url, index });
-    } catch {}
-  });
   return out;
 }
 
@@ -197,16 +195,18 @@ function parseWatchConfigServers(html: string): ServerEntry[] {
 }
 
 function parseServers(html: string, cheerio: any): ServerEntry[] {
-  const configured = parseWatchConfigServers(html);
-  if (configured.length) return configured;
-  let list = parseServersCheerio(html, cheerio);
-  if (list.length === 0) list = parseServersRegex(html);
-
+  // initialServers may contain only the initially selected mirror. Merge it
+  // with every server button in the rendered page and the raw HTML fallback.
+  const list = [
+    ...parseWatchConfigServers(html),
+    ...parseServersCheerio(html, cheerio),
+    ...parseServersRegex(html),
+  ];
   const seen: Record<string, boolean> = {};
   const deduped: ServerEntry[] = [];
   for (let i = 0; i < list.length; i++) {
     const s = list[i];
-    if (seen[s.url]) continue;
+    if (!s.url || seen[s.url]) continue;
     seen[s.url] = true;
     deduped.push(s);
   }
@@ -680,7 +680,8 @@ export async function getStream({
     fallbacks.length + " iframe in " + (Date.now() - t0) + "ms",
   );
 
-  if (streamLinks.length === 0 && fallbacks.length > 0) return fallbacks;
+  if (streamLinks.length === 0) return fallbacks;
   const ordered = orderPreferredStreams(streamLinks, preferredServer);
-  return ordered as Stream[];
+  // Do not hide unresolvable external mirrors just because one server resolved.
+  return ordered.concat(fallbacks) as Stream[];
 }
