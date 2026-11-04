@@ -66,6 +66,27 @@ async function main() {
     "expected VIDOUT to resolve independently");
   assert.ok(streams.some((stream) => stream.link === nexusUrl && stream.type === "iframe"),
     "an unresolved server should remain visible as an embed fallback when another server resolves");
+  // Desktop may fail to resolve the GD extractor even when Mobile succeeds.
+  // The original embed must remain available instead of disappearing.
+  const failingContext = {
+    axios: {
+      async get(url) {
+        if (url === episodeUrl) return { data: episodeHtml, status: 200, headers: {} };
+        throw new Error("Simulated Desktop extractor/network failure: " + url);
+      },
+    },
+    cheerio: null,
+  };
+  const failedExtractionStreams = await getStream({
+    link: episodeUrl,
+    type: "tv",
+    signal: new AbortController().signal,
+    providerContext: failingContext,
+  });
+  assert.ok(
+    failedExtractionStreams.some((stream) => stream.link === iqUrl && stream.type === "iframe"),
+    "GD Mirror must remain available as an embed fallback when IQST extraction fails",
+  );
   console.log("MultiMovies current GD mirror fallback test passed");
 }
 
