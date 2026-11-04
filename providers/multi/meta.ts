@@ -211,10 +211,11 @@ export const getMeta = async function ({
       }
     } else {
       // Movie / single‑link behaviour
+      // Movies are direct-play items, not episode lists. Leaving
+      // episodesLink populated makes Vega call getEpisodes() on a movie URL.
       linkList.push({
         title: result.title,
         quality: "",
-        episodesLink: url,
         directLinks: [
           {
             title: result.title,
