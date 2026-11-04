@@ -428,7 +428,8 @@ async function resolvePublicEmbed(
   const decoded = html.replace(/\\u0026/g, "&").replace(/\\u003d/g, "=")
     .replace(/\\\//g, "/").replace(/&amp;/g, "&");
   const candidates: string[] = [];
-  const mediaRe = /(?:https?:)?\/\/[^"'\\\s<>]+?\.(?:m3u8|mp4|m4v)(?:\?[^"'\\\s<>]*)?/gi;
+  // Accept HLS, DASH and direct MP4 sources, including signed query strings.
+  const mediaRe = /(?:https?:)?\/\/[^"'\\\s<>]+?\.(?:m3u8|mpd|mp4|m4v)(?:\?[^"'\\\s<>]*)?/gi;
   let match: RegExpExecArray | null;
   while ((match = mediaRe.exec(decoded)) !== null) {
     let candidate = match[0];
@@ -649,26 +650,18 @@ export async function getStream({
 
   // 4) Merge
   const streamLinks: StreamEx[] = [];
-  const fallbacks: Stream[] = [];
   for (let i = 0; i < settled.length; i++) {
     const { server, streams } = settled[i];
-    if (streams.length === 0) {
-      // Match the shared Vega provider convention: retain the original embed
-      // as a fallback when an extractor cannot resolve it in this runtime.
-      // Desktop and Mobile may differ in request support or timing.
-      fallbacks.push({
-        server: server.name + " (embed)",
-        link: server.url,
-        type: "iframe",
-      });
-      continue;
-    }
+    if (streams.length === 0) continue;
     for (let j = 0; j < streams.length; j++) {
       const ex = streams[j] as StreamEx;
+      // An iframe is an embed page, not media. Never pass it to Vega's
+      // native player as though it were a playable stream.
+      if (!ex.link || String(ex.type || "").toLowerCase() === "iframe") continue;
       const merged: StreamEx = {
         server: server.name + " / " + (ex.server || "stream"),
         link: ex.link,
-        type: ex.type || "m3u8",
+        type: ex.type || directMediaType(ex.link) || "m3u8",
       };
       if (ex.headers) merged.headers = ex.headers;
       if (ex.quality) merged.quality = ex.quality;
@@ -678,12 +671,12 @@ export async function getStream({
   }
 
   console.log(
-    "[stream] DONE " + streamLinks.length + " real + " +
-    fallbacks.length + " iframe in " + (Date.now() - t0) + "ms",
+    "[stream] DONE " + streamLinks.length + " playable media stream(s) in " +
+    (Date.now() - t0) + "ms",
   );
 
-  if (streamLinks.length === 0) return fallbacks;
-  const ordered = orderPreferredStreams(streamLinks, preferredServer);
-  // Do not hide unresolvable external mirrors just because one server resolved.
-  return ordered.concat(fallbacks) as Stream[];
+  // Return only resolved media. Unresolved embeds are deliberately omitted;
+  // this keeps both Mobile and Desktop server lists free of non-playable URLs.
+  if (streamLinks.length === 0) return [];
+  return orderPreferredStreams(streamLinks, preferredServer) as Stream[];
 }
