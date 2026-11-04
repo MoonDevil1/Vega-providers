@@ -64,8 +64,8 @@ async function main() {
     "expected the current GD mirror data-link chain to resolve to HLS");
   assert.ok(streams.some((stream) => stream.link === vidoutMediaUrl && stream.server.indexOf("VIDOUT") >= 0),
     "expected VIDOUT to resolve independently");
-  assert.ok(streams.some((stream) => stream.link === nexusUrl && stream.type === "iframe"),
-    "an unresolved server should remain visible as an embed fallback when another server resolves");
+  assert.ok(!streams.some((stream) => stream.link === nexusUrl || stream.type === "iframe"),
+    "unresolved iframe embeds must not be returned as playable streams");
   // Desktop may fail to resolve the GD extractor even when Mobile succeeds.
   // The original embed must remain available instead of disappearing.
   const failingContext = {
@@ -84,10 +84,10 @@ async function main() {
     providerContext: failingContext,
   });
   assert.ok(
-    failedExtractionStreams.some((stream) => stream.link === iqUrl && stream.type === "iframe"),
-    "GD Mirror must remain available as an embed fallback when IQST extraction fails",
+    !failedExtractionStreams.some((stream) => stream.link === iqUrl || stream.type === "iframe"),
+    "failed IQST extraction must not expose an iframe as a playable stream",
   );
-  console.log("MultiMovies current GD mirror fallback test passed");
+  console.log("MultiMovies playable-media-only regression tests passed");
 }
 
 main().catch((error) => {
