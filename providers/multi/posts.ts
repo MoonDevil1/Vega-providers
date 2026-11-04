@@ -100,7 +100,7 @@ export async function getPosts({
   
   const baseUrl = (await getBaseUrl("multi", axios, cheerio)).replace(/\/+$/, "");
 
-  const route = (filter || "featured").replace(/^\\/+/, "").replace(/\\/+$/, "");
+  const route = (filter || "featured").replace(/^\/+/, "").replace(/\/+$/, "");
   const urlObject = new URL(`${baseUrl}/catalog`);
 
   // These routes match the current MultiMovies site instead of mapping
@@ -124,7 +124,7 @@ export async function getPosts({
   } else if (route === "trending") {
     urlObject.pathname = "/trending";
   } else {
-    urlObject.pathname = "/" + route.replace(/^\\/+/, "");
+    urlObject.pathname = "/" + route.replace(/^\/+/, "");
   }
   urlObject.searchParams.set("page", String(Math.max(1, page)));
   const url = urlObject.href;
