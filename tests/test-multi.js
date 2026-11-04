@@ -70,6 +70,11 @@ const alternateDesktopMarkupPage =
   '<a data-url="/series/test-show/season/4/episode/10" aria-label="Episode 10: Data URL">Open</a>' +
   '</section></body></html>';
 
+const movieUrl = base + "/movie/test-movie";
+const moviePage =
+  '<html><body><h1 class="cinejoy-detail-title">Test Movie</h1>' +
+  '<div class="cinejoy-detail-overview">A movie fixture.</div></body></html>';
+
 const singleSeasonNoSelectPage =
   '<html><body>' +
   '<h1 class="cinejoy-detail-title">The Perfect Lie</h1>' +
@@ -101,6 +106,7 @@ const providerContext = {
       if (parsed.pathname === "/series/test-show" && season === "3") return { data: legacyDownloadLinksPage, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "4") return { data: alternateDesktopMarkupPage, status: 200 };
       if (parsed.pathname === "/series/the-perfect-lie") return { data: singleSeasonNoSelectPage, status: 200 };
+      if (parsed.pathname === "/movie/test-movie") return { data: moviePage, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "6") return { data: blockedSeasonPage, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "5" && !range) return { data: partialRangeSeason, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "5" && range === "3") throw new Error("Secondary range unavailable in Desktop runtime");
@@ -147,6 +153,14 @@ const providerContext = {
   assert.equal(alternateMarkupEpisodes[0].link, seriesUrl + "/season/4/episode/9");
   assert.match(alternateMarkupEpisodes[0].title, /Episode 9: Alternate markup/);
   assert.equal(alternateMarkupEpisodes[1].link, seriesUrl + "/season/4/episode/10");
+
+  const movieMeta = await getMeta({ link: movieUrl, providerContext });
+  assert.equal(movieMeta.type, "movie");
+  assert.equal(movieMeta.linkList.length, 1);
+  assert.equal(movieMeta.linkList[0].episodesLink, undefined,
+    "movie metadata must not be exposed as an episode list");
+  assert.equal(movieMeta.linkList[0].directLinks[0].link, movieUrl,
+    "movie metadata must expose its direct playback link");
 
   const liveLayoutMeta = await getMeta({ link: base + "/series/the-perfect-lie", providerContext });
   assert.equal(liveLayoutMeta.title, "The Perfect Lie");
