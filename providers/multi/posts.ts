@@ -223,9 +223,7 @@ export async function getPosts({
       });
     }
     if (posts.length === 0) {
-      const fallbackPath = urlObject.pathname;
-      const fallback = new URL(baseUrl + fallbackPath);
-      fallback.searchParams.set("page", String(Math.max(1, page)));
+      const fallback = new URL(urlObject.href);
       try {
         const retry = await axios.get(fallback.href, { headers: { ...HEADERS, Referer: baseUrl }, signal, timeout: 12000, maxRedirects: 5 });
         const $fallback = cheerio.load(retry.data);
