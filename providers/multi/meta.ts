@@ -85,7 +85,7 @@ export const getMeta = async function ({
 
     // Title
     const ogTitle = String($('meta[property="og:title"]').attr("content") || $('meta[name="twitter:title"]').attr("content") || "")
-      .replace(/\s*[-|]\s*MultiMovies(?:\s+\\d+(?:\.\\d+)*)?\s*$/i, "")
+      .replace(/\s*[-|]\s*MultiMovies(?:\s+\d+(?:\.\d+)*)?\s*$/i, "")
       .trim();
     result.title =
       watchItem?.title?.toString().trim() ||
