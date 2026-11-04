@@ -84,10 +84,15 @@ export const getMeta = async function ({
     const watchConfig = extractAssignedObject(pageHtml, "watchConfig");
 
     // Title
+    const ogTitle = String($('meta[property="og:title"]').attr("content") || $('meta[name="twitter:title"]').attr("content") || "")
+      .replace(/\\s*[-|]\\s*MultiMovies(?:\\s+\\d+(?:\\.\\d+)*)?\\s*$/i, "")
+      .trim();
     result.title =
       watchItem?.title?.toString().trim() ||
       $(".cinejoy-detail-title").first().text().trim() ||
       $(".watch-details-summary").first().text().trim() ||
+      ogTitle ||
+      $("h1").first().text().trim() ||
       "Unknown Title";
 
     // Poster image
@@ -95,12 +100,16 @@ export const getMeta = async function ({
       watchItem?.poster ||
       $(".watch-bg img").first().attr("src") ||
       $(".cinejoy-detail-poster img").first().attr("src") ||
+      $('meta[property="og:image"]').attr("content") ||
+      $('meta[name="twitter:image"]').attr("content") ||
       "";
 
     // Synopsis
     result.synopsis =
       $("#cinejoyOverview").first().text().trim() ||
       $(".cinejoy-detail-overview").first().text().trim() ||
+      $('meta[property="og:description"]').attr("content") ||
+      $('meta[name="description"]').attr("content") ||
       "";
 
     // Current pages use .episode-card; older pages used Cinejoy markup.
@@ -111,10 +120,12 @@ export const getMeta = async function ({
     const statusText = $(".cinejoy-spec-box, .watch-details, .cinejoy-detail-stage").text();
     const hasSeriesStatus = /TV\s*Series|Series/i.test(statusText);
     const itemType = String(watchItem?.type || watchConfig?.type || "").toLowerCase();
+    const ogType = String($('meta[property="og:type"]').attr("content") || "").toLowerCase();
     const hasCinejoyEpisodes = $(".cinejoy-episodes-section").length > 0;
     result.type =
-      itemType === "tv" || itemType === "series" || hasCinejoyEpisodes ||
-      hasEpisodeCards || isSeriesRoute || hasSeriesStatus ? "series" : "movie";
+      itemType === "tv" || itemType === "series" ||
+      ogType.includes("tv_show") || ogType.includes("tv.series") ||
+      hasCinejoyEpisodes || hasEpisodeCards || isSeriesRoute || hasSeriesStatus ? "series" : "movie";
 
     // IMDb ID (not exposed in this HTML)
     result.imdbId = "";
