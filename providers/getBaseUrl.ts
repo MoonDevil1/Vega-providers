@@ -111,8 +111,8 @@ export const getBaseUrl = async (
       cache.expiresAt = Date.now() + cacheTtl;
       return discovered;
     }
-    // Never fall back to the reference repository's potentially stale domain.
-    return "https://multimovies.wtf";
+    // Use the currently verified MultiMovies host when domain discovery fails.
+    return fallbackUrl;
   }
 
   const urls = await fetchProviderUrls();
@@ -125,5 +125,5 @@ export const getBaseUrl = async (
 
   const configured = normaliseSiteUrl(urls[providerValue]?.url || "");
   if (configured) return configured;
-  return providerValue === "multi" ? "https://multimovies.wtf" : "";
+  return providerValue === "multi" ? fallbackUrl : "";
 };
