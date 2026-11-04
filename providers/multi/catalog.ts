@@ -1,5 +1,9 @@
 export const catalog = [
-  { title: "Top Rated", filter: "trending" },
+  { title: "Featured", filter: "featured" },
+  { title: "Movies", filter: "movies" },
+  { title: "Series", filter: "series" },
+  { title: "Top IMDb Movies", filter: "top-imdb-movies" },
+  { title: "Top IMDb Series", filter: "top-imdb-series" },
   { title: "Bollywood Movies", filter: "genre/bollywood-movies" },
   { title: "Hollywood", filter: "genre/hollywood" },
   { title: "South Indian", filter: "genre/south-indian" },

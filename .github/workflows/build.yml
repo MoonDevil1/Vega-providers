@@ -1,6 +1,17 @@
 name: Validate Vega provider bundles
 
 on:
+  pull_request:
+    paths:
+      - "providers/**"
+      - "manifest.json"
+      - "build-bundled.js"
+      - "package.json"
+      - "package-lock.json"
+      - "tests/test-multi.js"
+      - "tests/test-multi-stream.js"
+      - "tests/test-multi-catalog.js"
+      - ".github/workflows/build.yml"
   push:
     branches:
       - main
@@ -12,6 +23,7 @@ on:
       - "package-lock.json"
       - "tests/test-multi.js"
       - "tests/test-multi-stream.js"
+      - "tests/test-multi-catalog.js"
       - ".github/workflows/build.yml"
   workflow_dispatch:
 
@@ -44,6 +56,8 @@ jobs:
         run: node tests/test-multi.js
       - name: Run MultiMovies stream regression tests
         run: node tests/test-multi-stream.js
+      - name: Run MultiMovies catalog regression tests
+        run: node tests/test-multi-catalog.js
       - name: Validate generated JavaScript syntax
         run: |
           for file in dist/multi/catalog.js dist/multi/posts.js dist/multi/meta.js dist/multi/episodes.js dist/multi/stream.js; do
