@@ -100,26 +100,31 @@ export async function getPosts({
   
   const baseUrl = (await getBaseUrl("multi", axios, cheerio)).replace(/\/+$/, "");
 
-  const route = (filter || "trending").replace(/^\/+/, "").replace(/\/+$/, "");
+  const route = (filter || "featured").replace(/^\\/+/, "").replace(/\\/+$/, "");
   const urlObject = new URL(`${baseUrl}/catalog`);
 
-  // The current MultiMovies site uses /catalog query filters and query-based
-  // pagination. Keep every page on this canonical endpoint to prevent repeats.
-  if (route === "trending") {
-    urlObject.searchParams.set("sort", "rating");
+  // These routes match the current MultiMovies site instead of mapping
+  // every catalog category to a generic genre query.
+  if (route === "featured") {
+    urlObject.searchParams.set("featured", "1");
   } else if (route === "movies") {
-    urlObject.searchParams.set("type", "movie");
-    urlObject.searchParams.set("sort", "latest");
+    urlObject.pathname = "/movies";
   } else if (route === "series") {
-    urlObject.searchParams.set("type", "tv");
-    urlObject.searchParams.set("sort", "latest");
+    urlObject.pathname = "/series";
+  } else if (route === "top-imdb-movies") {
+    urlObject.pathname = "/movies";
+    urlObject.searchParams.set("sort", "imdb");
+    urlObject.searchParams.set("top", "1");
+  } else if (route === "top-imdb-series") {
+    urlObject.pathname = "/series";
+    urlObject.searchParams.set("sort", "imdb");
+    urlObject.searchParams.set("top", "1");
   } else if (route.startsWith("genre/")) {
-    urlObject.searchParams.set("genre", route.slice("genre/".length));
-    urlObject.searchParams.set("sort", "latest");
+    urlObject.pathname = "/" + route;
+  } else if (route === "trending") {
+    urlObject.pathname = "/trending";
   } else {
-    // Preserve supported catalog routes as a category slug when possible.
-    urlObject.searchParams.set("genre", route);
-    urlObject.searchParams.set("sort", "latest");
+    urlObject.pathname = "/" + route.replace(/^\\/+/, "");
   }
   urlObject.searchParams.set("page", String(Math.max(1, page)));
   const url = urlObject.href;
@@ -218,7 +223,7 @@ export async function getPosts({
       });
     }
     if (posts.length === 0) {
-      const fallbackPath = route === "series" ? "/series" : route === "movies" ? "/movies" : route === "trending" ? "/trending" : "/" + route;
+      const fallbackPath = urlObject.pathname;
       const fallback = new URL(baseUrl + fallbackPath);
       fallback.searchParams.set("page", String(Math.max(1, page)));
       try {
