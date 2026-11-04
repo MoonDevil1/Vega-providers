@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const cheerio = require("cheerio");
 const { catalog } = require("../dist/multi/catalog.js");
 const { getPosts, getSearchPosts } = require("../dist/multi/posts.js");
+const { getMeta } = require("../dist/multi/meta.js");
 
 const landingPage = '<a href="https://catalog.example.test/">Visit MultiMovies</a>';
 const listingPage =
@@ -16,6 +17,22 @@ const providerContext = {
   axios: {
     get: async (url) => {
       if (url === "https://multimovies.wtf/") return { data: landingPage, status: 200 };
+      if (url.endsWith("/movie/og-sample")) {
+        return { data: '<html><head>' +
+          '<meta property="og:title" content="Sample Movie - MultiMovies 2.0">' +
+          '<meta property="og:type" content="video.movie">' +
+          '<meta property="og:image" content="https://images.example.test/sample.jpg">' +
+          '<meta property="og:description" content="Sample synopsis.">' +
+          '</head><body></body></html>', status: 200 };
+      }
+      if (url.endsWith("/series/og-sample")) {
+        return { data: '<html><head>' +
+          '<meta property="og:title" content="Sample Series - MultiMovies 2.0">' +
+          '<meta property="og:type" content="video.tv_show">' +
+          '<meta property="og:image" content="https://images.example.test/series.jpg">' +
+          '<meta property="og:description" content="Series synopsis.">' +
+          '</head><body></body></html>', status: 200 };
+      }
       requests.push(new URL(url));
       return { data: listingPage, status: 200 };
     },
@@ -69,7 +86,25 @@ const providerContext = {
   assert.equal(requests[0].searchParams.get("q"), "sample title");
   assert.equal(requests[0].searchParams.get("page"), "3");
 
-  console.log("MultiMovies catalog regression tests passed.");
+  const movieMeta = await getMeta({
+    link: "https://catalog.example.test/movie/og-sample",
+    providerContext,
+  });
+  assert.equal(movieMeta.title, "Sample Movie");
+  assert.equal(movieMeta.image, "https://images.example.test/sample.jpg");
+  assert.equal(movieMeta.synopsis, "Sample synopsis.");
+  assert.equal(movieMeta.type, "movie");
+
+  const seriesMeta = await getMeta({
+    link: "https://catalog.example.test/series/og-sample",
+    providerContext,
+  });
+  assert.equal(seriesMeta.title, "Sample Series");
+  assert.equal(seriesMeta.type, "series");
+  assert.equal(seriesMeta.linkList.length, 1);
+  assert.ok(seriesMeta.linkList[0].episodesLink);
+
+  console.log("MultiMovies catalog and Open Graph metadata regression tests passed.");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;
