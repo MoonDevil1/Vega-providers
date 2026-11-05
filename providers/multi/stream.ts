@@ -597,9 +597,13 @@ export async function getStream({
 
   // 3) Fire ALL servers in parallel with per-server timeouts
   const jobs = servers.map((server) => {
-    const budget = /streams\.iqsmartgames\.com\/embed\//i.test(server.url)
+    const normalizedName = server.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const timeoutKey = Object.keys(TIMEOUTS).find(
+      (key) => key.toLowerCase().replace(/[^a-z0-9]/g, "") === normalizedName,
+    );
+    const budget = IQST_RE.test(server.url)
       ? TIMEOUTS.IQST
-      : (TIMEOUTS[server.name] || TIMEOUTS.default);
+      : (timeoutKey ? TIMEOUTS[timeoutKey] : TIMEOUTS.default);
     const t = Date.now();
 
     return raceWithAbort(
