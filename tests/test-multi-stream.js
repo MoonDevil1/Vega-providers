@@ -60,6 +60,8 @@ async function main() {
     providerContext: { axios, cheerio: null },
   });
   assert.ok(streams.length > 0, "expected a playable stream");
+  assert.ok(streams[0].server.toLowerCase().includes("gd mirror"),
+    "GD Mirror must be listed first when its stream resolves");
   assert.ok(streams.some((stream) => stream.link === mediaUrl && stream.type === "m3u8"),
     "expected the current GD mirror data-link chain to resolve to HLS");
   assert.ok(streams.some((stream) => stream.link === vidoutMediaUrl && stream.server.indexOf("VIDOUT") >= 0),
@@ -72,7 +74,11 @@ async function main() {
     axios: {
       async get(url) {
         if (url === episodeUrl) return { data: episodeHtml, status: 200, headers: {} };
-        throw new Error("Simulated Desktop extractor/network failure: " + url);
+        if (url === vidoutUrl) return { data: "<html><body>VIDOUT embed</body></html>", status: 200, headers: {} };
+        if (url === "https://raw.githubusercontent.com/Watchout2025/api/refs/heads/main/hls/movie/12345") {
+          return { data: vidoutMediaUrl, status: 200, headers: {} };
+        }
+        throw new Error("Simulated GD Mirror failure: " + url);
       },
     },
     cheerio: null,
