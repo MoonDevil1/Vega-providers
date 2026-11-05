@@ -41,7 +41,7 @@ const axios = {
     if (url === "https://raw.githubusercontent.com/Watchout2025/api/refs/heads/main/hls/movie/12345") {
       return { data: vidoutMediaUrl, status: 200, headers: {} };
     }
-    if (url === iqUrl) return { data: iqHtml, status: 200, headers: {} };
+    if (url === iqUrl) { await new Promise((resolve) => setTimeout(resolve, 10)); return { data: iqHtml, status: 200, headers: {} }; }
     if (url.startsWith("https://streams.iqsmartgames.com/myseriesapi?")) {
       return { data: "{}", status: 200, headers: {} };
     }
