@@ -579,7 +579,7 @@ export async function getStream({
 
   if (servers.length === 0) return [];
 
-  let preferredServer = "auto";
+  let preferredServer = "gdmirror";
   try {
     preferredServer = String(await providerContext.kvStore.get("multi_preferredServer") || "gdmirror");
     // Upgrade the old default so existing installations also prefer GD Mirror.
