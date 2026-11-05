@@ -464,7 +464,7 @@ function serverPreferenceMatches(server: string, preference: string): boolean {
   if (!preference || preference === "auto") return false;
   const name = String(server || "").toLowerCase().replace(/[^a-z0-9]/g, "");
   const wanted = preference.toLowerCase().replace(/[^a-z0-9]/g, "");
-  if (wanted === "gdmirror") return /gdmirror|googledrive|gd/.test(name);
+  if (wanted === "gdmirror") return name.includes("gdmirror") || name.includes("googledrive") || name === "gd";
   return name.includes(wanted);
 }
 function orderPreferredStreams(streams: StreamEx[], preferredServer: string): StreamEx[] {
@@ -581,7 +581,9 @@ export async function getStream({
 
   let preferredServer = "auto";
   try {
-    preferredServer = String(await providerContext.kvStore.get("multi_preferredServer") || "auto");
+    preferredServer = String(await providerContext.kvStore.get("multi_preferredServer") || "gdmirror");
+    // Upgrade the old default so existing installations also prefer GD Mirror.
+    if (preferredServer === "auto") preferredServer = "gdmirror";
   } catch (error) {
     console.warn("[stream] preferences unavailable:", error);
   }
