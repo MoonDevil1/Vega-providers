@@ -178,8 +178,8 @@ export const getMeta = async function ({
             if (!season) return;
             if (!seasonMap.has(season)) {
               seasonMap.set(season, {
-                title: label || \`Season \${season}\`,
-                episodesLink: \`\${seriesBase}?season=\${season}\`,
+                title: label || "Season " + season,
+                episodesLink: \`" + seriesBase + "?season=" + season + "\`,
               });
             }
           });
