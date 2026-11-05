@@ -18,11 +18,12 @@ function seasonPage(options) {
   const episodes = options.episodes || [];
   const ranges = options.ranges || [];
   const rangeSelect = ranges.length
-    ? '<select id="episodeRangeSelect" class="cinejoy-season-select episode-range-select">' +
+    ? '<select id="episodeRangeSelect" class="season-selector episode-range-select">' +
       ranges.map((range) => '<option value="' + range + '"' + (range === (episodes[0] ? episodes[0].number : ranges[0]) ? ' selected=""' : '') + '>Episodes ' + range + '</option>').join("") +
       '</select>'
     : "";
   return '<html><body>' +
+    '<script>const watchItem = ' + JSON.stringify({ title: "Test Show", poster: "/watch-item-poster.jpg", type: "tv", metadata: { nested: true } }) + ';</script>' +
     '<div class="cinejoy-detail-title">Test Show</div>' +
     '<div id="cinejoyOverview">A test synopsis.</div>' +
     '<div class="watch-bg"><img src="/poster.jpg"></div>' +
@@ -119,6 +120,7 @@ const providerContext = {
   const meta = await getMeta({ link: seriesUrl, providerContext });
   assert.equal(meta.title, "Test Show");
   assert.equal(meta.type, "series");
+  assert.equal(meta.image, "/watch-item-poster.jpg", "nested watchItem config should be parsed in Desktop runtime");
   assert.equal(meta.linkList.length, 2, "episode-range choices must not be reported as seasons");
   assert.deepEqual(meta.linkList.map((entry) => entry.title), [
     "Season 1 · 3 episodes",
