@@ -19,7 +19,7 @@ const headers = {
 };
 
 function extractAssignedObject(html: string, variable: string): any {
-  const match = new RegExp("(?:const|let|var)\s+" + variable + "\s*=\s*", "m").exec(html);
+  const match = new RegExp("(?:const|let|var)\\s+" + variable + "\\s*=\\s*", "m").exec(html);
   if (!match) return null;
   const start = html.indexOf("{", match.index + match[0].length);
   if (start < 0) return null;
@@ -150,21 +150,38 @@ export const getMeta = async function ({
       // Support the legacy Cinejoy dropdown and current season selectors.
       // Option values may be numeric or labels such as "Season 1".
       const seasonSelectors = [
-        ".cinejoy-season-pill-dropdown select[aria-label='Season'] option",
-        "select[aria-label='Season'] option",
-        "select[name='season'] option",
-        "#seasonSelect option",
-        ".season-selector option",
+        ".cinejoy-season-pill-dropdown select",
+        "select[aria-label='Season']",
+        "select[name='season']",
+        "#seasonSelect",
+        ".season-selector",
       ];
       seasonSelectors.forEach((selector) => {
-        $(selector).each((_, opt) => {
-          const value = ($(opt).attr("value") || "").trim();
-          const label = $(opt).text().replace(/\s+/g, " ").trim();
-          const season = value.match(/\d+/)?.[0] || label.match(/season\s*(\d+)/i)?.[1];
-          if (!season) return;
-          seasonMap.set(season, {
-            title: label || `Season ${season}`,
-            episodesLink: `${seriesBase}?season=${season}`,
+        $(selector).each((_, select) => {
+          const selectEl = $(select);
+          const selectIdentity = [
+            selectEl.attr("id") || "",
+            selectEl.attr("class") || "",
+            selectEl.attr("name") || "",
+            selectEl.attr("aria-label") || "",
+          ].join(" ").toLowerCase();
+          // Episode-range dropdowns contain numeric values too; never treat
+          // those ranges as season numbers.
+          if (/episode|ep[-_ ]?range|range[-_ ]?select/.test(selectIdentity)) return;
+
+          selectEl.find("option").each((_, opt) => {
+            const value = ($(opt).attr("value") || "").trim();
+            const label = $(opt).text().replace(/\s+/g, " ").trim();
+            const valueSeason = value.match(/^(?:season[-_ ]*|s)?0*(\d+)$/i)?.[1];
+            const labelSeason = label.match(/\bseason\s*0*(\d+)\b/i)?.[1];
+            const season = valueSeason || labelSeason;
+            if (!season) return;
+            if (!seasonMap.has(season)) {
+              seasonMap.set(season, {
+                title: label || \`Season \${season}\`,
+                episodesLink: \`\${seriesBase}?season=\${season}\`,
+              });
+            }
           });
         });
       });
