@@ -93,6 +93,43 @@ async function main() {
     !failedExtractionStreams.some((stream) => stream.link === iqUrl || stream.type === "iframe"),
     "failed IQST extraction must not expose an iframe as a playable stream",
   );
+
+  // Current pages label the server "Cineverse HD", not exactly "Cineverse".
+  // Its resolver needs more than the generic 12s budget to fetch the embed
+  // page and resolve the StreamHG mirror.
+  const cineverseUrl = "https://rozgarlelo.modiplay.xyz/embed/tmdb/tv?id=76479&s=1&e=1";
+  const cineverseEpisodeHtml =
+    '<button data-id="cineverse" data-server-index="0" data-url="' + cineverseUrl + '">' +
+    '<span class="server-name">Cineverse HD</span></button>';
+  const cineverseEmbedHtml =
+    '<div class="srv-item" data-url="https://hanerix.com/e/demo" data-platform="streamhg" data-pname="StreamHG" data-code="demo"></div>';
+  const cineverseContext = {
+    axios: {
+      async get(url) {
+        if (url === episodeUrl) return { data: cineverseEpisodeHtml, status: 200, headers: {} };
+        if (url === cineverseUrl) {
+          await new Promise((resolve) => setTimeout(resolve, 13000));
+          return { data: cineverseEmbedHtml, status: 200, headers: {} };
+        }
+        if (url.startsWith("https://rozgarlelo.modiplay.xyz/proxy.php?")) {
+          return { data: '<script>var directSrc="https://cdn.example.test/cineverse/master.m3u8";</script>', status: 200, headers: {} };
+        }
+        throw new Error("Unexpected Cineverse test URL: " + url);
+      },
+    },
+    cheerio: null,
+  };
+  const cineverseStreams = await getStream({
+    link: episodeUrl,
+    type: "tv",
+    signal: new AbortController().signal,
+    providerContext: cineverseContext,
+  });
+  assert.ok(
+    cineverseStreams.some((stream) => stream.link === "https://cdn.example.test/cineverse/master.m3u8"),
+    "Cineverse HD must not be cut off by the generic 12s timeout",
+  );
+
   console.log("MultiMovies playable-media-only regression tests passed");
 }
 
