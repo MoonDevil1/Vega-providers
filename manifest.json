@@ -2,7 +2,7 @@
   {
     "display_name": "MultiMovies",
     "value": "multi",
-    "version": "1.6.17",
+    "version": "1.6.18",
     "icon": "https://m1.multimovies.courses/assets/img/logo.png",
     "type": "global",
     "hasSettings": true,

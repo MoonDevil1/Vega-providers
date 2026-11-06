@@ -66,13 +66,13 @@ function deEscape(s: string): string {
 /*    any absolute https://...master.m3u8          -> use as-is        */
 /*    /hls/.../master.m3u8                         -> HUB + path       */
 /* ================================================================== */
-function extractM3u8(html: string): string | null {
+function extractM3u8(html: string, baseUrl: string = HUB + "/"): string | null {
   const decoded = deEscape(html).replace(/\\u0026/g, "&").replace(/\\u003d/g, "=");
   const candidates: string[] = [];
   const add = (raw: string) => {
     let value = String(raw || "").trim().replace(/&amp;/g, "&");
     if (!value) return;
-    if (value.startsWith("/")) value = HUB + value;
+    try { value = new URL(value, baseUrl).toString(); } catch { return; }
     if (!/^https?:\/\//i.test(value)) return;
     if (!/\.m3u8(?:[?#]|$)/i.test(value) && !/stream_proxy\.php\?[^"'<>]*url=/i.test(value)) return;
     if (/stream_proxy\.php/i.test(value) && !/[?&]seg=/.test(value)) value += "&seg=direct";
@@ -281,15 +281,22 @@ async function resolveModernMirror(server: ServerItem, axios: any, headers: Reco
       });
       const body = typeof response.data === "string" ? response.data : JSON.stringify(response.data || {});
       const media = extractDirectMedia(body, pageUrl);
+      // StreamHG/Bingr can expose a browser-only blob video while the actual
+      // transport is a stream_proxy.php relay assembled in the page script.
+      const proxyMedia = extractM3u8(body, pageUrl);
+      if (proxyMedia && !media.some((item) => item.url === proxyMedia)) {
+        media.push({ url: proxyMedia, type: "m3u8" });
+      }
       if (media.length) {
-        let referer = HUB + "/";
-        try { referer = new URL(pageUrl).origin + "/"; } catch {}
+        let origin = HUB;
+        try { origin = new URL(pageUrl).origin; } catch {}
+        const tracks = extractSubtitles(body, pageUrl);
         return media.map((item) => ({
           server: server.name,
           link: item.url,
           type: item.type,
-          headers: { "User-Agent": MOBILE_UA, Referer: referer },
-          ...(extractSubtitles(body, pageUrl).length ? { subtitles: extractSubtitles(body, pageUrl) } : {}),
+          headers: { "User-Agent": MOBILE_UA, Referer: pageUrl, Origin: origin },
+          ...(tracks.length ? { subtitles: tracks } : {}),
         }));
       }
 
