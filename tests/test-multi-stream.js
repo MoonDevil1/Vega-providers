@@ -326,6 +326,35 @@ async function main() {
   assert.equal(vidoutImdbStreams.length, 0, "IMDb IDs without a TMDB mapping must not resolve to a guessed media URL");
   assert.equal(vidoutImdbLookupCount, 0, "VIDOUT must not query its movie endpoint with an IMDb ID");
 
+
+  // Bingr/StreamHG may use a blob video element while the actual HLS transport
+  // is exposed through a relative stream_proxy.php URL in player JavaScript.
+  const relayCineverseUrl = "https://rozgarlelo.modiplay.xyz/embed/tmdb/tv?id=76479&s=1&e=1";
+  const relayMirrorUrl = "https://bingr.example.test/proxy.php?id=abc";
+  const relayUrl = "https://bingr.example.test/stream_proxy.php?url=https%3A%2F%2Fcdn.example.test%2Fmaster.m3u8&seg=direct";
+  const relayContext = {
+    axios: {
+      async get(url) {
+        if (url === episodeUrl) return { data: '<button data-url="' + relayCineverseUrl + '"><span class="server-name">Cineverse HD</span></button>', status: 200, headers: {} };
+        if (url === relayCineverseUrl) return { data: '<div class="srv-item" data-url="' + relayMirrorUrl + '" data-platform="bingr" data-pname="Bingr"></div>', status: 200, headers: {} };
+        if (url === relayMirrorUrl) return {
+          data: '<video src="blob:https://bingr.example.test/player-id"></video><script>const stream = "/stream_proxy.php?url=https%3A%2F%2Fcdn.example.test%2Fmaster.m3u8";</script>',
+          status: 200, headers: {},
+        };
+        throw new Error("Unexpected relay test URL: " + url);
+      },
+    },
+    cheerio: null,
+  };
+  const relayStreams = await getStream({
+    link: episodeUrl,
+    type: "tv",
+    signal: new AbortController().signal,
+    providerContext: relayContext,
+  });
+  assert.ok(relayStreams.some((stream) => stream.link === relayUrl && stream.type === "m3u8"),
+    "relative stream_proxy.php relay must be returned instead of the browser-only blob URL");
+
   console.log("MultiMovies playable-media-only regression tests passed");
 }
 
