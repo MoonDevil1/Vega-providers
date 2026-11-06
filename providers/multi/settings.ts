@@ -11,7 +11,7 @@ export const getSettingsSchema = async function ({
       type: "select",
       label: "Preferred Streaming Server",
       description:
-        "GD Mirror is tried first. If it cannot resolve, other working servers remain available as fallbacks.",
+        "GD Mirror is tried first, Cineverse second, then other servers as automatic fallbacks.",
       options: [
         { label: "GD Mirror", value: "gdmirror" },
         { label: "Cineverse", value: "cineverse" },
