@@ -252,7 +252,7 @@ async function expandVidoutMaster(
       if (/(?:^|[\/])(?:tiles?|storyboard|thumbnails?)(?:[-_.\/]|$)/i.test(line)) continue;
       let variantUrl = "";
       try { variantUrl = new URL(line, masterUrl).toString(); } catch { continue; }
-      const resolution = line.match(/RESOLUTION=\d+x(\d+)/i);
+      const resolution = streamInfo.match(/RESOLUTION=\d+x(\d+)/i);
       const height = resolution ? Number(resolution[1]) : 0;
       const quality = height >= 2000 ? "2160" : height >= 1000 ? "1080" : height >= 650 ? "720" : height >= 400 ? "480" : "HD";
       variants.push({ server: "VIDOUT " + quality + "p", link: variantUrl, type: "m3u8", quality });
