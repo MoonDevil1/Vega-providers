@@ -1,3 +1,5 @@
+// Desktop loads every home catalog row concurrently. Keep this list focused
+// on the actual homepage shelves; place the full browse directory in genres.
 export const catalog = [
   { title: "Featured", filter: "featured" },
   { title: "Recently Updated Movies", filter: "movies" },
@@ -6,6 +8,9 @@ export const catalog = [
   { title: "Top Movies", filter: "top-imdb-movies" },
   { title: "Top Shows", filter: "top-imdb-series" },
   { title: "Top Rated", filter: "trending" },
+];
+
+export const genres = [
   { title: "Bollywood Movies", filter: "genre/bollywood-movies" },
   { title: "Hollywood", filter: "genre/hollywood" },
   { title: "South Indian", filter: "genre/south-indian" },
