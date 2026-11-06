@@ -597,65 +597,52 @@ export async function getStream({
   const mediaType = detectMediaType(type, pageUrl, html);
   console.log("[stream] media type=" + mediaType + "  starting parallel run");
 
-  // 3) Fire ALL servers in parallel with per-server timeouts
-  const jobs = servers.map((server) => {
-    const budget = /streams\.iqsmartgames\.com\/embed\//i.test(server.url)
-      ? TIMEOUTS.IQST
-      : (CINEVERSE_RE.test(server.url) || /cineverse/i.test(server.name))
-        ? TIMEOUTS.Cineverse
-        : (TIMEOUTS[server.name] || TIMEOUTS.default);
-    const t = Date.now();
-
-    return raceWithAbort(
-      (innerSignal) => {
-        const direct = directMediaStream(server.url, server.name);
-        return direct.length > 0
-          ? Promise.resolve(direct)
-          : routeServer(server.url, mediaType, innerSignal, providerContext, pageUrl);
-      },
-      budget,
-      server.name,
-    ).then(
-      (streams) => {
-        const dt = Date.now() - t;
-        console.log("[stream] <- " + server.name + ": " + streams.length + " in " + dt + "ms");
-        return { server, streams };
-      },
-      (e: any) => {
-        const dt = Date.now() - t;
-        console.warn("[stream] x " + server.name + " (" + dt + "ms): " + (e && e.message));
-        return { server, streams: [] as Stream[] };
-      },
-    );
-  });
-
-  // Do not make a fast mirror wait for every slow mirror. Collect results as
-  // they finish and cap this lookup; unresolved slow servers can be tried on
-  // the next play attempt instead of blocking all playback.
-  const completed: Array<{ server: ServerEntry; streams: Stream[] }> = [];
-  let completedCount = 0;
-  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
-  const trackedJobs = jobs.map((job) => job.then((result) => {
-    completed.push(result);
-    completedCount++;
-    return result;
-  }));
-  await Promise.race([
-    Promise.all(trackedJobs),
-    new Promise<void>((resolve) => {
-      deadlineTimer = setTimeout(resolve, 24000);
-    }),
-  ]);
-  if (deadlineTimer) clearTimeout(deadlineTimer);
-  const settled = completed;
-  if (completedCount < jobs.length) {
-    console.warn("[stream] returning partial results after 24000ms (" + completedCount + "/" + jobs.length + " servers finished)");
-  }
+  // 3) Resolve servers with bounded concurrency. Vega Desktop's provider
+  // bridge has a small pending-operation budget; starting every resolver at
+  // once creates one timeout plus several requests per server and can exhaust
+  // that budget before otherwise healthy mirrors finish.
+  const settled: Array<{ server: ServerEntry; streams: Stream[] }> = [];
+  let nextServer = 0;
+  const worker = async () => {
+    while (nextServer < servers.length) {
+      if (signal.aborted) return;
+      const index = nextServer++;
+      const server = servers[index];
+      const budget = /streams\\.iqsmartgames\\.com\\/embed\\//i.test(server.url)
+        ? TIMEOUTS.IQST
+        : (CINEVERSE_RE.test(server.url) || /cineverse/i.test(server.name))
+          ? TIMEOUTS.Cineverse
+          : (TIMEOUTS[server.name] || TIMEOUTS.default);
+      const startedAt = Date.now();
+      try {
+        const streams = await raceWithAbort(
+          (innerSignal) => {
+            const direct = directMediaStream(server.url, server.name);
+            return direct.length > 0
+              ? Promise.resolve(direct)
+              : routeServer(server.url, mediaType, innerSignal, providerContext, pageUrl);
+          },
+          budget,
+          server.name,
+        );
+        console.log("[stream] <- " + server.name + ": " + streams.length + " in " + (Date.now() - startedAt) + "ms");
+        settled[index] = { server, streams };
+      } catch (error: any) {
+        console.warn("[stream] x " + server.name + " (" + (Date.now() - startedAt) + "ms): " + (error?.message || error));
+        settled[index] = { server, streams: [] };
+      }
+    }
+  };
+  const SERVER_CONCURRENCY = 2;
+  await Promise.all(
+    Array.from({ length: Math.min(SERVER_CONCURRENCY, servers.length) }, () => worker()),
+  );
+  const completedServers = settled.filter(Boolean);
 
   // 4) Merge
   const streamLinks: StreamEx[] = [];
-  for (let i = 0; i < settled.length; i++) {
-    const { server, streams } = settled[i];
+  for (let i = 0; i < completedServers.length; i++) {
+    const { server, streams } = completedServers[i];
     if (streams.length === 0) continue;
     for (let j = 0; j < streams.length; j++) {
       const ex = streams[j] as StreamEx;
