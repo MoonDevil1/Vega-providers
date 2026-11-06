@@ -633,7 +633,7 @@ export async function getStream({
       }
     }
   };
-  const SERVER_CONCURRENCY = 2;
+  const SERVER_CONCURRENCY = 1;
   await Promise.all(
     Array.from({ length: Math.min(SERVER_CONCURRENCY, servers.length) }, () => worker()),
   );
