@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const cheerio = require("cheerio");
-const { catalog } = require("../dist/multi/catalog.js");
+const { catalog, genres } = require("../dist/multi/catalog.js");
 const { getPosts, getSearchPosts } = require("../dist/multi/posts.js");
 const { getMeta } = require("../dist/multi/meta.js");
 
@@ -54,11 +54,14 @@ const providerContext = {
     "top-imdb-series",
     "episodes",
     "trending",
-    "provider/amazon-prime",
   ];
   for (const filter of expectedFilters) {
-    assert.ok(catalog.some((item) => item.filter === filter), "catalog must expose " + filter);
+    assert.ok(catalog.some((item) => item.filter === filter), "home catalog must expose " + filter);
   }
+  for (const filter of ["provider/amazon-prime", "provider/netflix", "genre/action", "genre/anime-series"]) {
+    assert.ok(genres.some((item) => item.filter === filter), "browse genres must expose " + filter);
+  }
+  assert.ok(catalog.length <= 8, "home catalog must stay small to avoid a large concurrent request burst");
 
   const cases = [
     ["featured", "/catalog", "featured", "1"],
