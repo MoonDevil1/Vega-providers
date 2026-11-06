@@ -55,6 +55,16 @@ const partialRangeSeason = seasonPage({
   ranges: [1, 3],
 });
 
+const multiSeasonMarkupPage =
+  '<html><body><section class="cinejoy-episodes-section">' +
+  '<div class="cinejoy-season-grid active" id="cinejoy-season-1">' +
+  '<a class="cinejoy-ep-name" href="' + seriesUrl + '/season/1/episode/1">Season One Episode One</a>' +
+  '</div><div class="cinejoy-season-grid" id="cinejoy-season-2">' +
+  '<a class="cinejoy-ep-name" href="' + seriesUrl + '/season/2/episode/1">Season Two Episode One</a>' +
+  '</div><div class="cinejoy-season-grid" id="cinejoy-season-3">' +
+  '<a class="cinejoy-ep-name" href="' + seriesUrl + '/season/3/episode/1">Season Three Episode One</a>' +
+  '</div></section></body></html>';
+
 const blockedSeasonPage =
   '<html><body><title>Just a moment...</title><h1>Checking your browser</h1></body></html>';
 
@@ -103,6 +113,7 @@ const providerContext = {
       if (parsed.pathname === "/series/test-show" && range === "1" && season === "1") return { data: firstRange, status: 200 };
       if (parsed.pathname === "/series/test-show" && range === "3" && season === "1") return { data: secondRange, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "2") return { data: secondSeason, status: 200 };
+      if (parsed.pathname === "/series/test-show" && ["1", "2", "3"].includes(season)) return { data: multiSeasonMarkupPage, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "3") return { data: legacyDownloadLinksPage, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "4") return { data: alternateDesktopMarkupPage, status: 200 };
       if (parsed.pathname === "/series/the-perfect-lie") return { data: singleSeasonNoSelectPage, status: 200 };
@@ -142,6 +153,15 @@ const providerContext = {
   const seasonTwo = await getEpisodes({ url: seriesUrl + "?season=2", providerContext });
   assert.equal(seasonTwo.length, 1);
   assert.match(seasonTwo[0].title, /Season Two Premiere/);
+
+  const multiSeasonSeven = await getEpisodes({ url: seriesUrl + "?season=2", providerContext });
+  assert.deepEqual(multiSeasonSeven.map((episode) => episode.link), [
+    seriesUrl + "/season/2/episode/1",
+  ], "only episode links explicitly matching the selected season may be returned");
+  const multiSeasonEight = await getEpisodes({ url: seriesUrl + "?season=1", providerContext });
+  assert.deepEqual(multiSeasonEight.map((episode) => episode.link), [
+    seriesUrl + "/season/1/episode/1",
+  ], "episode selection must not leak cards from hidden seasons");
 
   const legacySeason = await getEpisodes({ url: seriesUrl + "?season=3", providerContext });
   assert.equal(legacySeason.length, 1, "legacy h5 + HubCloud episode lists should be supported");
