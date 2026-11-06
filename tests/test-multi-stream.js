@@ -100,6 +100,31 @@ async function main() {
     "GD Mirror should retain the third advertised inner server as a fallback");
   assert.ok(!streams.some((stream) => stream.link === nexusUrl || stream.type === "iframe"),
     "unresolved iframe embeds must not be returned as playable streams");
+  // GD Mirror and Cineverse are always the first two priorities, regardless
+  // of the source site's original button order or the saved single preference.
+  const priorityHtml = '<div id="playerServerGrid">' +
+    '<button data-id="cine" data-server-index="0" data-url="https://cdn.example.test/cineverse.m3u8"><span class="server-name">Cineverse</span></button>' +
+    '<button data-id="other" data-server-index="1" data-url="https://cdn.example.test/other.m3u8"><span class="server-name">Nexus</span></button>' +
+    '<button data-id="gd" data-server-index="2" data-url="https://cdn.example.test/gdmirror.m3u8"><span class="server-name">GD mirror</span></button>' +
+    '</div>';
+  const priorityStreams = await getStream({
+    link: episodeUrl,
+    type: "tv",
+    signal: new AbortController().signal,
+    providerContext: {
+      axios: { async get(url) {
+        if (url === episodeUrl) return { data: priorityHtml, status: 200, headers: {} };
+        throw new Error("Unexpected priority test URL: " + url);
+      }},
+      cheerio: null,
+      kvStore: { async get() { return "cineverse"; } },
+    },
+  });
+  assert.ok(priorityStreams[0].server.toLowerCase().includes("gd mirror"),
+    "GD Mirror must remain first even when Cineverse is the saved preference");
+  assert.ok(priorityStreams[1].server.toLowerCase().includes("cineverse"),
+    "Cineverse must remain second, ahead of all other servers");
+
   // Desktop may fail to resolve the GD extractor even when Mobile succeeds.
   // The original embed must remain available instead of disappearing.
   const failingContext = {
