@@ -93,6 +93,88 @@ async function main() {
     !failedExtractionStreams.some((stream) => stream.link === iqUrl || stream.type === "iframe"),
     "failed IQST extraction must not expose an iframe as a playable stream",
   );
+
+  // Current pages label the server "Cineverse HD", not exactly "Cineverse".
+  // Its resolver needs more than the generic 12s budget to fetch the embed
+  // page and resolve the StreamHG mirror.
+  const cineverseUrl = "https://rozgarlelo.modiplay.xyz/embed/tmdb/tv?id=76479&s=1&e=1";
+  const cineverseEpisodeHtml =
+    '<button data-id="cineverse" data-server-index="0" data-url="' + cineverseUrl + '">' +
+    '<span class="server-name">Cineverse HD</span></button>';
+  const cineverseEmbedHtml =
+    '<div class="srv-item" data-url="https://hanerix.com/e/demo" data-platform="streamhg" data-pname="StreamHG" data-code="demo"></div>';
+  const cineverseContext = {
+    axios: {
+      async get(url) {
+        if (url === episodeUrl) return { data: cineverseEpisodeHtml, status: 200, headers: {} };
+        if (url === cineverseUrl) {
+          await new Promise((resolve) => setTimeout(resolve, 13000));
+          return { data: cineverseEmbedHtml, status: 200, headers: {} };
+        }
+        if (url === "https://hanerix.com/e/demo") {
+          return { data: '<script>var directSrc="https://cdn.example.test/cineverse/master.m3u8";</script>', status: 200, headers: {} };
+        }
+        throw new Error("Unexpected Cineverse test URL: " + url);
+      },
+    },
+    cheerio: null,
+  };
+  const cineverseStreams = await getStream({
+    link: episodeUrl,
+    type: "tv",
+    signal: new AbortController().signal,
+    providerContext: cineverseContext,
+  });
+  assert.ok(
+    cineverseStreams.some((stream) => stream.link === "https://cdn.example.test/cineverse/master.m3u8"),
+    "Cineverse HD must not be cut off by the generic 12s timeout",
+  );
+
+
+  // Modern Cineverse .srv-item data-url values are real mirror URLs. They must
+  // be fetched directly; the legacy proxy.php flow is only for switchServer().
+  const modernMirrorUrl = "https://hanerix.com/e/cineverse-modern";
+  const modernMediaUrl = "https://cdn.example.test/cineverse-modern/master.m3u8";
+  const modernCineverseUrl = "https://rozgarlelo.modiplay.xyz/embed/tmdb/tv?id=76479&s=1&e=1";
+  const modernEpisodeHtml =
+    '<button data-id="cineverse" data-server-index="0" data-url="' + modernCineverseUrl + '">' +
+    '<span class="server-name">Cineverse HD</span></button>';
+  const modernCineverseHtml =
+    '<div class="srv-item" data-url="' + modernMirrorUrl + '" data-platform="streamhg" data-code="mirror-1" data-pname="StreamHG"></div>';
+  const modernMirrorHtml = '<script>var directSrc="' + modernMediaUrl + '";</script>';
+  let modernMirrorRequested = false;
+  let legacyProxyRequested = false;
+  const modernCineverseContext = {
+    axios: {
+      async get(url) {
+        if (url === episodeUrl) return { data: modernEpisodeHtml, status: 200, headers: {} };
+        if (url === modernCineverseUrl) return { data: modernCineverseHtml, status: 200, headers: {} };
+        if (url === modernMirrorUrl) {
+          modernMirrorRequested = true;
+          return { data: modernMirrorHtml, status: 200, headers: {} };
+        }
+        if (url.includes("/proxy.php?")) {
+          legacyProxyRequested = true;
+          throw new Error("Modern mirror must not be sent through legacy proxy.php");
+        }
+        throw new Error("Unexpected modern Cineverse test URL: " + url);
+      },
+    },
+    cheerio: null,
+  };
+  const modernCineverseStreams = await getStream({
+    link: episodeUrl,
+    type: "tv",
+    signal: new AbortController().signal,
+    providerContext: modernCineverseContext,
+  });
+  assert.ok(modernMirrorRequested, "modern Cineverse data-url mirror must be requested directly");
+  assert.ok(!legacyProxyRequested, "modern Cineverse mirrors must not be rebuilt as legacy proxy.php URLs");
+  assert.ok(
+    modernCineverseStreams.some((stream) => stream.link === modernMediaUrl && stream.type === "m3u8"),
+    "modern Cineverse StreamHG mirror must resolve to its playable HLS URL",
+  );
+
   console.log("MultiMovies playable-media-only regression tests passed");
 }
 
