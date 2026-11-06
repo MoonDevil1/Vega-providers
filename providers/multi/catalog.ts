@@ -1,16 +1,16 @@
-// Desktop loads every home catalog row concurrently. Keep this list focused
-// on the actual homepage shelves; place the full browse directory in genres.
+// Keep the homepage focused on the five current MultiMovies catalog endpoints.
+// Desktop loads every home row concurrently, so browse-only shelves stay in genres.
 export const catalog = [
   { title: "Featured", filter: "featured" },
-  { title: "Recently Updated Movies", filter: "movies" },
-  { title: "Recently Updated Series", filter: "series" },
-  { title: "Latest Episodes", filter: "episodes" },
+  { title: "Movies", filter: "movies" },
+  { title: "Series", filter: "series" },
   { title: "Top Movies", filter: "top-imdb-movies" },
-  { title: "Top Shows", filter: "top-imdb-series" },
-  { title: "Top Rated", filter: "trending" },
+  { title: "Top Series", filter: "top-imdb-series" },
 ];
 
 export const genres = [
+  { title: "Latest Episodes", filter: "episodes" },
+  { title: "Trending", filter: "trending" },
   { title: "Bollywood Movies", filter: "genre/bollywood-movies" },
   { title: "Hollywood", filter: "genre/hollywood" },
   { title: "South Indian", filter: "genre/south-indian" },
