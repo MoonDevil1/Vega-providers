@@ -380,7 +380,10 @@ export async function cineverseExtractor(
   const legacyServers = parseServers(html);
   const modernServers = parseModernServers(html, _cheerio);
   const servers = legacyServers.length ? legacyServers : modernServers;
-  // Only the legacy switchServer() markup uses proxy.php. Modern .srv-item entries\n  // already expose the actual mirror URL in data-url; rebuilding those URLs as\n  // proxy.php?p=...&c=... silently discards the supplied mirror and breaks playback.\n  const useProxyFlow = legacyServers.length > 0;
+  // Only the legacy switchServer() markup uses proxy.php. Modern .srv-item entries
+  // already expose the actual mirror URL in data-url; rebuilding those URLs as
+  // proxy.php?p=...&c=... silently discards the supplied mirror and breaks playback.
+  const useProxyFlow = legacyServers.length > 0;
   console.log("[cineverse] servers=" + servers.length + (legacyServers.length ? " (switchServer)" : modernServers.length ? " (modern via proxy)" : ""));
   let dropped = 0;
   if (!servers.length) {
