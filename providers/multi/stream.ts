@@ -246,6 +246,7 @@ async function expandVidoutMaster(
         continue;
       }
       if (!attributes || line.startsWith("#")) continue;
+      const streamInfo = attributes;
       attributes = "";
       // "tiles.m3u8" is a storyboard made of thumbnail images, not video.
       if (/(?:^|[\/])(?:tiles?|storyboard|thumbnails?)(?:[-_.\/]|$)/i.test(line)) continue;
