@@ -5,7 +5,11 @@ const episodeUrl = "https://m1.multimovies.courses/series/demo/season/1/episode/
 const iqUrl = "https://streams.iqsmartgames.com/embed/tv/34391/1/1?key=test-key";
 const evidUrl = "https://pro.iqsmartgames.com/evid/test-file";
 const mirrorUrl = "https://hanerix.com/e/test-mirror";
+const mirrorUrl2 = "https://multimovies.rpmhub.site/#a65ok";
+const mirrorUrl3 = "https://multimovies.p2pplay.pro/#nlhzl";
 const mediaUrl = "https://cdn.example.test/video/master.m3u8?token=fixture";
+const mediaUrl2 = "https://cdn.example.test/video/rpmshare.m3u8?token=fixture";
+const mediaUrl3 = "https://cdn.example.test/video/p2p.m3u8?token=fixture";
 const vidoutUrl = "https://vidout.pages.dev/movie/12345";
 const nexusUrl = "https://www.moviesnexus.fun/movie/12345";
 const vidoutMediaUrl = "https://cdn.example.test/video/vidout.m3u8";
@@ -27,11 +31,17 @@ const episodeHtml = '<script>const watchConfig = ' + JSON.stringify({
 
 const iqHtml = [
   '<script>let FinalID = "34391"; let idType = "tmdbid"; let myKey = "test-key"; let season = "1"; let epname = "1";</script>',
-  '<a data-link="' + evidUrl + '">Open source</a>',
+  '<a href="#" data-link="' + evidUrl + '">Open source</a>',
 ].join("\n");
 
-const evidHtml = '<ul><li class="server-item" data-link="' + mirrorUrl + '">STREAMHG</li></ul>';
+const evidHtml = '<ul>' +
+  '<li class="server-item" data-link="' + mirrorUrl + '">STREAMHG</li>' +
+  '<li class="server-item" data-link="' + mirrorUrl2 + '">RPMSHARE</li>' +
+  '<li class="server-item" data-link="' + mirrorUrl3 + '">STREAMP2P</li>' +
+  '</ul>';
 const mirrorHtml = '<script>var file = "' + mediaUrl + '";</script>';
+const mirrorHtml2 = '<script>var file = "' + mediaUrl2 + '";</script>';
+const mirrorHtml3 = '<script>var file = "' + mediaUrl3 + '";</script>';
 
 const axios = {
   async get(url) {
@@ -47,6 +57,8 @@ const axios = {
     }
     if (url === evidUrl) return { data: evidHtml, status: 200, headers: {} };
     if (url === mirrorUrl) return { data: mirrorHtml, status: 200, headers: {} };
+    if (url === mirrorUrl2) return { data: mirrorHtml2, status: 200, headers: {} };
+    if (url === mirrorUrl3) return { data: mirrorHtml3, status: 200, headers: {} };
     throw new Error("Unexpected test URL: " + url);
   },
 };
@@ -82,6 +94,10 @@ async function main() {
     "GD Mirror must be listed first when its stream resolves");
   assert.ok(streams.some((stream) => stream.link === mediaUrl && stream.type === "m3u8"),
     "expected the current GD mirror data-link chain to resolve to HLS");
+  assert.ok(streams.some((stream) => stream.link === mediaUrl2 && stream.type === "m3u8"),
+    "GD Mirror should retain the second advertised inner server as a fallback");
+  assert.ok(streams.some((stream) => stream.link === mediaUrl3 && stream.type === "m3u8"),
+    "GD Mirror should retain the third advertised inner server as a fallback");
   assert.ok(!streams.some((stream) => stream.link === nexusUrl || stream.type === "iframe"),
     "unresolved iframe embeds must not be returned as playable streams");
   // Desktop may fail to resolve the GD extractor even when Mobile succeeds.

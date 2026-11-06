@@ -57,9 +57,24 @@ function parseEpisodeAnchorsFromHtml(html: string, pageUrl: string): EpisodeLink
   return episodes;
 }
 
+function filterEpisodesForSeason(episodes: EpisodeLink[], season: string): EpisodeLink[] {
+  const selectedSeason = String(season || "").match(/\d+/)?.[0] || "";
+  if (!selectedSeason) return episodes;
+  return episodes.filter((episode) => {
+    try {
+      const match = new URL(episode.link).pathname.match(/\/season\/(\d+)\/episode\/\d+/i);
+      // Older download-only episode entries do not carry canonical season paths.
+      // Keep those entries; filter only links that explicitly identify a season.
+      return !match || match[1] === selectedSeason;
+    } catch {
+      return true;
+    }
+  });
+}
+
 function parseEpisodes(html: string, pageUrl: string, season: string, cheerio: any): EpisodeLink[] {
   const rawCardEpisodes = parseEpisodeAnchorsFromHtml(html, pageUrl);
-  if (rawCardEpisodes.length) return rawCardEpisodes;
+  if (rawCardEpisodes.length) return filterEpisodesForSeason(rawCardEpisodes, season);
 
   const $ = cheerio.load(html);
   let grid = season ? $(`#cinejoy-season-${season}`) : $(".cinejoy-season-grid.active").first();
@@ -218,7 +233,7 @@ function parseEpisodes(html: string, pageUrl: string, season: string, cheerio: a
       addCandidate(dataMatch[2], title);
     }
   }
-  return episodes;
+  return filterEpisodesForSeason(episodes, season);
 }
 
 function buildRangeUrl(inputUrl: URL, season: string, range: string, order: string): string {

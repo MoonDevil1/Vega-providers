@@ -488,8 +488,11 @@ async function resolveEmbedMedia(
   pageUrl: string, axios: any, headers: Record<string, string>,
   signal?: AbortSignal, depth: number = 0, seen: Record<string, boolean> = {},
 ): Promise<Stream[]> {
-  if (depth > 4 || seen[pageUrl]) return [];
-  seen[pageUrl] = true;
+  const pageKey = new URL(pageUrl);
+  pageKey.hash = "";
+  const normalizedPageUrl = pageKey.toString();
+  if (depth > 4 || seen[normalizedPageUrl] || Object.keys(seen).length >= 14) return [];
+  seen[normalizedPageUrl] = true;
   let html = "";
   try {
     const origin = new URL(pageUrl).origin;
@@ -514,7 +517,7 @@ async function resolveEmbedMedia(
     if (!/\.(?:m3u8|mp4|m4v)(?:[?#]|$)/i.test(mediaUrl)) return;
     mediaSeen[mediaUrl] = true;
     found.push({
-      server: "IQSmart direct",
+      server: "IQSmart " + host,
       link: mediaUrl,
       type: /\.(?:mp4|m4v)(?:[?#]|$)/i.test(mediaUrl) ? "mp4" : "m3u8",
       headers: { "User-Agent": headers["User-Agent"] || UA, Referer: referer },
@@ -540,26 +543,52 @@ async function resolveEmbedMedia(
   if (found.length) return found;
   if (depth >= 4) return [];
 
-  // Current IQSmart pages publish mirrors as <li data-link="..."> and
-  // sometimes place the next player URL on a div's src attribute. Include
-  // those elements; the old iframe-only walk missed the new server list.
-  const frameRe = /<(?:iframe|source|a|button|div|li)\b[^>]*\b(?:src|data-src|data-link|data-url|href)\s*=\s*["']([^"']+)["']/gi;
+  // Collect every relevant URL attribute independently. The live IQSmart
+  // player uses anchors with both href="#" and data-link="/evid/...", so a
+  // single alternation incorrectly captures only href and skips the evid page.
+  const tagRe = /<(?:iframe|source|a|button|div|li)\b[^>]*>/gi;
+  const attrRe = /\b(?:src|data-src|data-link|data-url|href)\s*=\s*(["'])(.*?)\1/gi;
   const frames: string[] = [];
-  while ((match = frameRe.exec(decoded)) !== null) {
-    try {
-      const frameUrl = new URL(match[1].replace(/&amp;/g, "&"), pageUrl).toString();
-      const frameHost = hostOf(frameUrl);
-      if (/^https?:/i.test(frameUrl) && !seen[frameUrl] &&
-          (KNOWN_XVID_HOSTS[frameHost] || /iqsmartgames|rpmhub|p2pplay|uns\.bio|hanerix|morencius|vibuxer|n1mwq/i.test(frameHost) ||
-           /\/evid\//i.test(frameUrl)) &&
-          frames.indexOf(frameUrl) < 0) frames.push(frameUrl);
-    } catch {}
+  let tagMatch: RegExpExecArray | null;
+  while ((tagMatch = tagRe.exec(decoded)) !== null) {
+    attrRe.lastIndex = 0;
+    let attrMatch: RegExpExecArray | null;
+    while ((attrMatch = attrRe.exec(tagMatch[0])) !== null) {
+      try {
+        const frameUrl = new URL(attrMatch[2].replace(/&amp;/g, "&"), pageUrl).toString();
+        const normalized = new URL(frameUrl);
+        normalized.hash = "";
+        const current = new URL(pageUrl);
+        current.hash = "";
+        const frameHost = hostOf(frameUrl);
+        if (/^https?:/i.test(frameUrl) && normalized.toString() !== current.toString() &&
+            !seen[normalized.toString()] &&
+            (KNOWN_XVID_HOSTS[frameHost] || /iqsmartgames|rpmhub|p2pplay|uns\.bio|hanerix|morencius|vibuxer|n1mwq/i.test(frameHost) ||
+             /\/evid\//i.test(frameUrl)) &&
+            frames.indexOf(frameUrl) < 0) frames.push(frameUrl);
+      } catch {}
+    }
   }
-  for (let i = 0; i < Math.min(frames.length, 8); i++) {
-    const nested = await resolveEmbedMedia(frames[i], axios, headers, signal, depth + 1, seen);
-    if (nested.length) return nested;
+
+  // Resolve nested mirrors together and retain every playable result. Returning
+  // only the first mirror made GD Mirror lose its automatic inner-server
+  // fallback even when another advertised mirror exposed a working playlist.
+  const nestedResults = await Promise.all(
+    frames.slice(0, 8).map((frameUrl) =>
+      resolveEmbedMedia(frameUrl, axios, headers, signal, depth + 1, seen)
+        .catch(() => [] as Stream[]),
+    ),
+  );
+  const merged: Stream[] = [];
+  const mergedSeen = new Set<string>();
+  for (const nested of nestedResults) {
+    for (const stream of nested) {
+      if (!stream?.link || mergedSeen.has(stream.link)) continue;
+      mergedSeen.add(stream.link);
+      merged.push(stream);
+    }
   }
-  return [];
+  return merged;
 }
 
 export async function iqstExtractor(
