@@ -25,7 +25,7 @@ const FILMU_RE     = /embed\.filmu\.in\//i;
 
 /* Per-server timeouts (ms). Fast ones get short budgets. */
 const TIMEOUTS: Record<string, number> = {
-  Cineverse: 16000,
+  Cineverse: 22000,
   IQST: 22000,
   "GD mirror": 22000,
   VIDOUT: 10000,
@@ -601,7 +601,9 @@ export async function getStream({
   const jobs = servers.map((server) => {
     const budget = /streams\.iqsmartgames\.com\/embed\//i.test(server.url)
       ? TIMEOUTS.IQST
-      : (TIMEOUTS[server.name] || TIMEOUTS.default);
+      : (CINEVERSE_RE.test(server.url) || /cineverse/i.test(server.name))
+        ? TIMEOUTS.Cineverse
+        : (TIMEOUTS[server.name] || TIMEOUTS.default);
     const t = Date.now();
 
     return raceWithAbort(
