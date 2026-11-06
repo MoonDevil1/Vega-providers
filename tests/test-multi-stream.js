@@ -194,12 +194,12 @@ async function main() {
     axios: {
       async get(url) {
         if (url === episodeUrl) return { data: fanoutHtml, status: 200, headers: {} };
-        if (/^https:\\/\\/mirror\\d+\\.example\\.test\\/embed$/.test(url)) {
+        if (url.indexOf("https://mirror") === 0 && url.endsWith("/embed")) {
           activeMirrorRequests++;
           maxActiveMirrorRequests = Math.max(maxActiveMirrorRequests, activeMirrorRequests);
           await new Promise((resolve) => setTimeout(resolve, 30));
           activeMirrorRequests--;
-          const id = url.match(/mirror(\\d+)/)[1];
+          const id = url.match(/mirror(\d+)/)[1];
           return {
             data: '<script>var source="https://cdn.example.test/mirror' + id + '.m3u8";</script>',
             status: 200,
