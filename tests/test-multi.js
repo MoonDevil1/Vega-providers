@@ -113,7 +113,7 @@ const providerContext = {
       if (parsed.pathname === "/series/test-show" && range === "1" && season === "1") return { data: firstRange, status: 200 };
       if (parsed.pathname === "/series/test-show" && range === "3" && season === "1") return { data: secondRange, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "2") return { data: secondSeason, status: 200 };
-      if (parsed.pathname === "/series/test-show" && ["1", "2", "3"].includes(season)) return { data: multiSeasonMarkupPage, status: 200 };
+      if (parsed.pathname === "/series/test-show" && ["7", "8", "9"].includes(season)) return { data: multiSeasonMarkupPage, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "3") return { data: legacyDownloadLinksPage, status: 200 };
       if (parsed.pathname === "/series/test-show" && season === "4") return { data: alternateDesktopMarkupPage, status: 200 };
       if (parsed.pathname === "/series/the-perfect-lie") return { data: singleSeasonNoSelectPage, status: 200 };
