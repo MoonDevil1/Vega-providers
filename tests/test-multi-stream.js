@@ -111,7 +111,7 @@ async function main() {
           await new Promise((resolve) => setTimeout(resolve, 13000));
           return { data: cineverseEmbedHtml, status: 200, headers: {} };
         }
-        if (url.startsWith("https://rozgarlelo.modiplay.xyz/proxy.php?")) {
+        if (url === "https://hanerix.com/e/demo") {
           return { data: '<script>var directSrc="https://cdn.example.test/cineverse/master.m3u8";</script>', status: 200, headers: {} };
         }
         throw new Error("Unexpected Cineverse test URL: " + url);
