@@ -58,11 +58,11 @@ const partialRangeSeason = seasonPage({
 const multiSeasonMarkupPage =
   '<html><body><section class="cinejoy-episodes-section">' +
   '<div class="cinejoy-season-grid active" id="cinejoy-season-1">' +
-  '<a class="cinejoy-ep-name" href="' + seriesUrl + '/season/1/episode/1">Season One Episode One</a>' +
+  '<a class="cinejoy-ep-name" href="' + seriesUrl + '/season/7/episode/1">Season Seven Episode One</a>' +
   '</div><div class="cinejoy-season-grid" id="cinejoy-season-2">' +
-  '<a class="cinejoy-ep-name" href="' + seriesUrl + '/season/2/episode/1">Season Two Episode One</a>' +
+  '<a class="cinejoy-ep-name" href="' + seriesUrl + '/season/8/episode/1">Season Eight Episode One</a>' +
   '</div><div class="cinejoy-season-grid" id="cinejoy-season-3">' +
-  '<a class="cinejoy-ep-name" href="' + seriesUrl + '/season/3/episode/1">Season Three Episode One</a>' +
+  '<a class="cinejoy-ep-name" href="' + seriesUrl + '/season/9/episode/1">Season Nine Episode One</a>' +
   '</div></section></body></html>';
 
 const blockedSeasonPage =
@@ -154,13 +154,13 @@ const providerContext = {
   assert.equal(seasonTwo.length, 1);
   assert.match(seasonTwo[0].title, /Season Two Premiere/);
 
-  const multiSeasonSeven = await getEpisodes({ url: seriesUrl + "?season=2", providerContext });
+  const multiSeasonSeven = await getEpisodes({ url: seriesUrl + "?season=8", providerContext });
   assert.deepEqual(multiSeasonSeven.map((episode) => episode.link), [
-    seriesUrl + "/season/2/episode/1",
+    seriesUrl + "/season/8/episode/1",
   ], "only episode links explicitly matching the selected season may be returned");
-  const multiSeasonEight = await getEpisodes({ url: seriesUrl + "?season=1", providerContext });
+  const multiSeasonEight = await getEpisodes({ url: seriesUrl + "?season=7", providerContext });
   assert.deepEqual(multiSeasonEight.map((episode) => episode.link), [
-    seriesUrl + "/season/1/episode/1",
+    seriesUrl + "/season/7/episode/1",
   ], "episode selection must not leak cards from hidden seasons");
 
   const legacySeason = await getEpisodes({ url: seriesUrl + "?season=3", providerContext });
