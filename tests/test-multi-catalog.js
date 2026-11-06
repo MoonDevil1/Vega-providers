@@ -10,6 +10,11 @@ const listingPage =
   '<a class="poster-art" href="/movie/sample-title"><img src="/poster.jpg" alt="Sample Title"></a>' +
   '<div class="poster-caption"><a href="/movie/sample-title">Sample Title</a></div>' +
   '</article>';
+const episodesPage =
+  '<div class="recent-episode-grid">' +
+  '<a class="episode-preview" href="/series/sample-show/season/1/episode/2">' +
+  '<div><img src="/episode.jpg" alt=""><span>S1 · E2</span></div>' +
+  '<h3>Sample Show</h3><p>Episode Two</p></a></div>';
 
 const requests = [];
 const providerContext = {
@@ -34,6 +39,7 @@ const providerContext = {
           '</head><body></body></html>', status: 200 };
       }
       requests.push(new URL(url));
+      if (new URL(url).pathname === "/episodes") return { data: episodesPage, status: 200 };
       return { data: listingPage, status: 200 };
     },
   },
@@ -46,6 +52,9 @@ const providerContext = {
     "series",
     "top-imdb-movies",
     "top-imdb-series",
+    "episodes",
+    "trending",
+    "provider/amazon-prime",
   ];
   for (const filter of expectedFilters) {
     assert.ok(catalog.some((item) => item.filter === filter), "catalog must expose " + filter);
@@ -58,6 +67,7 @@ const providerContext = {
     ["top-imdb-movies", "/movies", "sort", "imdb"],
     ["top-imdb-series", "/series", "sort", "imdb"],
     ["genre/action", "/genre/action", null, null],
+    ["provider/amazon-prime", "/provider/amazon-prime", null, null],
   ];
 
   for (const [filter, pathname, queryKey, queryValue] of cases) {
@@ -74,6 +84,14 @@ const providerContext = {
       assert.equal(requests[0].searchParams.get("top"), "1");
     }
   }
+
+  requests.length = 0;
+  const latestEpisodes = await getPosts({ filter: "episodes", page: 1, providerContext });
+  assert.equal(requests[0].pathname, "/episodes");
+  assert.equal(latestEpisodes.length, 1, "latest episodes page should parse episode-preview cards");
+  assert.equal(latestEpisodes[0].title, "Sample Show - S1 · E2 - Episode Two");
+  assert.equal(latestEpisodes[0].link, "https://catalog.example.test/series/sample-show/season/1/episode/2");
+  assert.equal(latestEpisodes[0].image, "https://catalog.example.test/episode.jpg");
 
   requests.length = 0;
   const results = await getSearchPosts({
