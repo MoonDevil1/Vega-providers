@@ -221,63 +221,62 @@ function parseServers(html: string, cheerio: any): ServerEntry[] {
 /* VIDOUT: try both IMDB (tt…) and TMDB numeric. Try /movie/ and /hls/movie/. */
 async function resolveVidout(
   url: string,
-  _mediaType: MediaType,
+  mediaType: MediaType,
   signal: AbortSignal,
   ctx: ProviderContext,
 ): Promise<Stream[]> {
   const out: Stream[] = [];
   const RAW = "https://raw.githubusercontent.com/Watchout2025/api/refs/heads/main";
 
-  // mediaId as it appears in the URL: tt3495030 / 1269325
-  const idMatch = url.match(/\/movie\/([^/?#]+)/);
+  // The current VIDOUT resolver only has a confirmed movie lookup contract.
+  // Do not treat a TV episode URL as a movie, and never scrape its generic
+  // player page for a default/sample playlist.
+  if (mediaType !== "movie") return out;
+
+  const idMatch = url.match(/\/movie\/([^/?#]+)/i);
   if (!idMatch) return out;
-  const primaryId = idMatch[1];
 
-  // Candidate id set: primary, and any ?tmdb= query override
-  const candidates: string[] = [primaryId];
+  // VIDOUT's API is keyed by TMDB for reliable movie matching. An IMDb
+  // tt-id is not interchangeable with a TMDB id; require an explicit TMDB
+  // mapping instead of probing an IMDb id and potentially accepting a
+  // unrelated fallback playlist.
+  let tmdbId = "";
   try {
-    const u = new URL(url);
-    const t = u.searchParams.get("tmdb");
-    if (t && candidates.indexOf(t) < 0) candidates.push(t);
+    const parsed = new URL(url);
+    tmdbId = String(parsed.searchParams.get("tmdb") || parsed.searchParams.get("tmdb_id") || "").trim();
   } catch {}
+  if (!tmdbId && /^\d+$/.test(idMatch[1])) tmdbId = idMatch[1];
+  if (!/^\d+$/.test(tmdbId)) {
+    console.warn("[stream] VIDOUT skipped: a numeric TMDB movie ID is required");
+    return out;
+  }
 
-  const paths = [
-    "/hls/movie/",
-    "/movie/",
-    "/hls/",
-    "/",
-  ];
-
-  outer:
-  for (let i = 0; i < candidates.length; i++) {
-    const id = candidates[i];
-    for (let j = 0; j < paths.length; j++) {
-      const href = RAW + paths[j] + id;
-      try {
-        const r = await ctx.axios.get(href, {
-          headers: Object.assign({}, BASE_HEADERS, {
-            Referer: "https://vidout.pages.dev/",
-          }),
-          signal,
-        });
-        const body = String(r.data || "").trim();
-        // Expect raw text: either a URL, or a JSON object with a url field
-        let hlsUrl = "";
-        if (body.indexOf("http") === 0) {
-          hlsUrl = body.split(/\s+/)[0];
-        } else if (body.charAt(0) === "{") {
-          try {
-            const obj = JSON.parse(body);
-            hlsUrl = String(obj.url || obj.hls || obj.link || "");
-          } catch {}
-        }
-        if (hlsUrl && hlsUrl.indexOf("http") === 0) {
-          out.push({ server: "VIDOUT", link: hlsUrl, type: "m3u8" });
-          break outer;
-        }
-      } catch {
-        // try next path/id
+  // Only request title-specific endpoints. Generic /hls and / routes may
+  // return a provider's default playlist rather than this requested title.
+  const paths = ["/hls/movie/", "/movie/"];
+  for (const path of paths) {
+    const href = RAW + path + encodeURIComponent(tmdbId);
+    try {
+      const response = await ctx.axios.get(href, {
+        headers: Object.assign({}, BASE_HEADERS, { Referer: "https://vidout.pages.dev/" }),
+        signal,
+      });
+      const body = String(response.data || "").trim();
+      let hlsUrl = "";
+      if (/^https?:\/\//i.test(body)) {
+        hlsUrl = body.split(/\s+/)[0];
+      } else if (body.charAt(0) === "{") {
+        try {
+          const obj = JSON.parse(body);
+          hlsUrl = String(obj.url || obj.hls || obj.link || "");
+        } catch {}
       }
+      if (hlsUrl && /^https?:\/\//i.test(hlsUrl) && /\.m3u8(?:[?#]|$)/i.test(hlsUrl)) {
+        out.push({ server: "VIDOUT", link: hlsUrl, type: "m3u8" });
+        break;
+      }
+    } catch {
+      // Try the next title-specific endpoint only.
     }
   }
   return out;
