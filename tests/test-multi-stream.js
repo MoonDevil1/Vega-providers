@@ -408,13 +408,13 @@ async function main() {
           return { data: vidoutMaster, status: 200, headers: {} };
         }
         if (url === vidoutMaster) return {
-          data: "#EXTM3U\\n" +
-            '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="English",URI="subtitles_english.m3u8"\\n' +
-            "#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080\\n" +
-            "tiles.m3u8\\n" +
-            "#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=1280x720\\n" +
-            "video_720p.m3u8\\n" +
-            "#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=854x480\\n" +
+          data: "#EXTM3U\n" +
+            '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="English",URI="subtitles_english.m3u8"\n' +
+            "#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080\n" +
+            "tiles.m3u8\n" +
+            "#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=1280x720\n" +
+            "video_720p.m3u8\n" +
+            "#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=854x480\n" +
             "video_480p.m3u8",
           status: 200, headers: {},
         };
