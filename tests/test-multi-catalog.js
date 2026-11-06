@@ -46,17 +46,20 @@ const providerContext = {
 };
 
 (async () => {
-  const expectedFilters = [
-    "featured",
-    "movies",
-    "series",
-    "top-imdb-movies",
-    "top-imdb-series",
-    "episodes",
-    "trending",
+  const expectedHomeCategories = [
+    ["Featured", "featured"],
+    ["Movies", "movies"],
+    ["Series", "series"],
+    ["Top Movies", "top-imdb-movies"],
+    ["Top Series", "top-imdb-series"],
   ];
-  for (const filter of expectedFilters) {
-    assert.ok(catalog.some((item) => item.filter === filter), "home catalog must expose " + filter);
+  assert.deepEqual(
+    catalog.map((item) => [item.title, item.filter]),
+    expectedHomeCategories,
+    "homepage must contain exactly the five requested MultiMovies categories in order",
+  );
+  for (const filter of ["episodes", "trending", "provider/amazon-prime", "provider/netflix", "genre/action", "genre/anime-series"]) {
+    assert.ok(genres.some((item) => item.filter === filter), "browse genres must expose " + filter);
   }
   for (const filter of ["provider/amazon-prime", "provider/netflix", "genre/action", "genre/anime-series"]) {
     assert.ok(genres.some((item) => item.filter === filter), "browse genres must expose " + filter);
