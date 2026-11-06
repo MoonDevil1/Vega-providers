@@ -396,6 +396,46 @@ async function main() {
   assert.ok(relayStreams.some((stream) => stream.link === relayUrl && stream.type === "m3u8"),
     "relative stream_proxy.php relay must be returned instead of the browser-only blob URL");
 
+  // VIDOUT's Don 2 master playlist advertises a 1080p "tiles.m3u8"
+  // storyboard lasting about two minutes before the real 720p/480p VOD
+  // variants. The provider must expose the full-length video variants only.
+  const vidoutMaster = "https://img.rousav.tech/media/demo/index.m3u8?api_key=fixture";
+  const vidoutMasterContext = {
+    axios: {
+      async get(url) {
+        if (url === episodeUrl) return { data: vidoutMovieHtml, status: 200, headers: {} };
+        if (url === "https://raw.githubusercontent.com/Watchout2025/api/refs/heads/main/hls/movie/12345") {
+          return { data: vidoutMaster, status: 200, headers: {} };
+        }
+        if (url === vidoutMaster) return {
+          data: "#EXTM3U\\n" +
+            '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="English",URI="subtitles_english.m3u8"\\n' +
+            "#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080\\n" +
+            "tiles.m3u8\\n" +
+            "#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=1280x720\\n" +
+            "video_720p.m3u8\\n" +
+            "#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=854x480\\n" +
+            "video_480p.m3u8",
+          status: 200, headers: {},
+        };
+        throw new Error("Unexpected VIDOUT master test URL: " + url);
+      },
+    },
+    cheerio: null,
+  };
+  const vidoutMasterStreams = await getStream({
+    link: episodeUrl,
+    type: "movie",
+    signal: new AbortController().signal,
+    providerContext: vidoutMasterContext,
+  });
+  assert.deepEqual(vidoutMasterStreams.map((stream) => stream.quality), ["720", "480"],
+    "VIDOUT should expose real 720p and 480p video variants in quality order");
+  assert.ok(vidoutMasterStreams.every((stream) => stream.link.includes("/video_")),
+    "VIDOUT must not return the two-minute tiles/storyboard playlist");
+  assert.ok(!vidoutMasterStreams.some((stream) => stream.link === vidoutMaster),
+    "VIDOUT master must be expanded when it contains a thumbnail-only variant");
+
   console.log("MultiMovies playable-media-only regression tests passed");
 }
 
