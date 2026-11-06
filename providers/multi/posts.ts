@@ -139,6 +139,24 @@ export async function getPosts({
     });
     const $ = cheerio.load(res.data);
     const posts: Post[] = [];
+    
+    // The /episodes listing uses .episode-preview anchors instead of poster cards.
+    // Parse it explicitly so Desktop does not stay on empty poster skeletons.
+    if (route === "episodes") {
+      $("a.episode-preview[href*='/season/'][href*='/episode/']").each((_i: number, node: any) => {
+        const card = $(node);
+        const rawHref = String(card.attr("href") || "").trim();
+        if (!rawHref) return;
+        const link = resolveUrl(rawHref, baseUrl);
+        if (!link || posts.some((post) => normaliseContentLink(post.link) === normaliseContentLink(link))) return;
+        const showTitle = normaliseTitle(card.find("h3").first().text());
+        const episodeNumber = card.find("span").first().text().replace(/\s+/g, " ").trim();
+        const episodeTitle = normaliseTitle(card.find("p").first().text());
+        const title = [showTitle, episodeNumber, episodeTitle].filter(Boolean).join(" - ");
+        const image = resolveUrl(getPosterSrc(card.find("img").first()), baseUrl);
+        if (title) posts.push({ title, link, image });
+      });
+    }
 
     // ── Primary: poster-card grid ──
     $("article.poster-card").each((_: number, element: any) => {
