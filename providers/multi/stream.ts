@@ -608,7 +608,7 @@ export async function getStream({
       if (signal.aborted) return;
       const index = nextServer++;
       const server = servers[index];
-      const budget = /streams\\.iqsmartgames\\.com\\/embed\\//i.test(server.url)
+      const budget = /streams\.iqsmartgames\.com\/embed\//i.test(server.url)
         ? TIMEOUTS.IQST
         : (CINEVERSE_RE.test(server.url) || /cineverse/i.test(server.name))
           ? TIMEOUTS.Cineverse
