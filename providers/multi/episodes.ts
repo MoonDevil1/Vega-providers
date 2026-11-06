@@ -58,11 +58,11 @@ function parseEpisodeAnchorsFromHtml(html: string, pageUrl: string): EpisodeLink
 }
 
 function filterEpisodesForSeason(episodes: EpisodeLink[], season: string): EpisodeLink[] {
-  const selectedSeason = String(season || "").match(/\\d+/)?.[0] || "";
+  const selectedSeason = String(season || "").match(/\d+/)?.[0] || "";
   if (!selectedSeason) return episodes;
   return episodes.filter((episode) => {
     try {
-      const match = new URL(episode.link).pathname.match(/\\/season\\/(\\d+)\\/episode\\/\\d+/i);
+      const match = new URL(episode.link).pathname.match(/\/season\/(\d+)\/episode\/\d+/i);
       // Older download-only episode entries do not carry canonical season paths.
       // Keep those entries; filter only links that explicitly identify a season.
       return !match || match[1] === selectedSeason;
