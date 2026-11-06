@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const { getStream } = require("../dist/multi/stream.js");
+const { getStream, getServers, resolveServer } = require("../dist/multi/stream.js");
 
 const episodeUrl = "https://m1.multimovies.courses/series/demo/season/1/episode/1";
 const iqUrl = "https://streams.iqsmartgames.com/embed/tv/34391/1/1?key=test-key";
@@ -59,13 +59,29 @@ async function main() {
     signal: controller.signal,
     providerContext: { axios, cheerio: null },
   });
+  const discoveredServers = await getServers({
+    link: episodeUrl,
+    type: "tv",
+    signal: new AbortController().signal,
+    providerContext: { axios, cheerio: null },
+  });
+  assert.equal(discoveredServers.length, 3, "discovery must return every advertised server, including unresolved ones");
+  assert.ok(discoveredServers.some((server) => server.name === "Nexus"),
+    "an unresolved server must remain visible in the discovery result");
+  const selectedGdStreams = await resolveServer({
+    server: discoveredServers[0],
+    type: "tv",
+    signal: new AbortController().signal,
+    providerContext: { axios, cheerio: null },
+  });
+  assert.ok(selectedGdStreams.some((stream) => stream.link === mediaUrl),
+    "selected-server resolution must resolve only the chosen GD Mirror entry");
+
   assert.ok(streams.length > 0, "expected a playable stream");
   assert.ok(streams[0].server.toLowerCase().includes("gd mirror"),
     "GD Mirror must be listed first when its stream resolves");
   assert.ok(streams.some((stream) => stream.link === mediaUrl && stream.type === "m3u8"),
     "expected the current GD mirror data-link chain to resolve to HLS");
-  assert.ok(streams.some((stream) => stream.link === vidoutMediaUrl && stream.server.indexOf("VIDOUT") >= 0),
-    "expected VIDOUT to resolve independently");
   assert.ok(!streams.some((stream) => stream.link === nexusUrl || stream.type === "iframe"),
     "unresolved iframe embeds must not be returned as playable streams");
   // Desktop may fail to resolve the GD extractor even when Mobile succeeds.
@@ -220,6 +236,95 @@ async function main() {
   assert.equal(fanoutStreams.length, 6, "all healthy mirrors must still resolve");
   assert.ok(maxActiveMirrorRequests <= 1,
     "server resolvers must stay within the single-server concurrency limit");
+
+
+  // Numeric movie IDs are treated as TMDB IDs and use title-specific VIDOUT endpoints.
+  const vidoutMovieUrl = "https://vidout.pages.dev/movie/12345";
+  const vidoutMovieHtml = '<button data-id="vidout-movie" data-server-index="0" data-url="' + vidoutMovieUrl +
+    '"><span class="server-name">VIDOUT</span></button>';
+  const vidoutMovieContext = {
+    axios: {
+      async get(url) {
+        if (url === episodeUrl) return { data: vidoutMovieHtml, status: 200, headers: {} };
+        if (url === "https://raw.githubusercontent.com/Watchout2025/api/refs/heads/main/hls/movie/12345") {
+          return { data: vidoutMediaUrl, status: 200, headers: {} };
+        }
+        if (url === "https://raw.githubusercontent.com/Watchout2025/api/refs/heads/main/movie/12345") {
+          return { data: "", status: 200, headers: {} };
+        }
+        throw new Error("Unexpected VIDOUT movie URL: " + url);
+      },
+    },
+    cheerio: null,
+  };
+  const vidoutMovieStreams = await getStream({
+    link: episodeUrl,
+    type: "movie",
+    signal: new AbortController().signal,
+    providerContext: vidoutMovieContext,
+  });
+  assert.ok(vidoutMovieStreams.some((stream) => stream.link === vidoutMediaUrl),
+    "numeric TMDB movie IDs must still resolve through VIDOUT");
+
+  // VIDOUT TV embeds are not supported by the current dedicated resolver.
+  // A generic playlist found in the page must never be mislabeled as the
+  // requested episode's media.
+  const vidoutTvUrl = "https://vidout.pages.dev/tv/12345/1/1";
+  const vidoutTvHtml = '<button data-id="vidout-tv" data-server-index="0" data-url="' + vidoutTvUrl +
+    '"><span class="server-name">VIDOUT</span></button>';
+  let vidoutTvFallbackRequested = false;
+  const vidoutTvContext = {
+    axios: {
+      async get(url) {
+        if (url === episodeUrl) return { data: vidoutTvHtml, status: 200, headers: {} };
+        if (url === vidoutTvUrl) {
+          vidoutTvFallbackRequested = true;
+          return { data: '<script>var source="https://cdn.example.test/default-sample.m3u8";</script>', status: 200, headers: {} };
+        }
+        throw new Error("Unexpected VIDOUT TV URL: " + url);
+      },
+    },
+    cheerio: null,
+  };
+  const vidoutTvStreams = await getStream({
+    link: episodeUrl,
+    type: "tv",
+    signal: new AbortController().signal,
+    providerContext: vidoutTvContext,
+  });
+  assert.equal(vidoutTvStreams.length, 0, "unsupported VIDOUT TV embeds must not produce a guessed stream");
+  assert.ok(!vidoutTvFallbackRequested, "unsupported VIDOUT TV URLs must not be scraped for generic fallback playlists");
+
+  // An IMDb tt-id is not a TMDB id. Without an explicit TMDB mapping, VIDOUT
+  // must not query guessed IDs or accept a generic page playlist.
+  const vidoutImdbUrl = "https://vidout.pages.dev/movie/tt1234567";
+  const vidoutImdbHtml = '<button data-id="vidout-imdb" data-server-index="0" data-url="' + vidoutImdbUrl +
+    '"><span class="server-name">VIDOUT</span></button>';
+  let vidoutImdbLookupCount = 0;
+  const vidoutImdbContext = {
+    axios: {
+      async get(url) {
+        if (url === episodeUrl) return { data: vidoutImdbHtml, status: 200, headers: {} };
+        if (url.indexOf("raw.githubusercontent.com/Watchout2025/api/") === 0) {
+          vidoutImdbLookupCount++;
+          return { data: "https://cdn.example.test/wrong-default.m3u8", status: 200, headers: {} };
+        }
+        if (url === vidoutImdbUrl) {
+          return { data: '<script>var source="https://cdn.example.test/default-sample.m3u8";</script>', status: 200, headers: {} };
+        }
+        throw new Error("Unexpected VIDOUT IMDb URL: " + url);
+      },
+    },
+    cheerio: null,
+  };
+  const vidoutImdbStreams = await getStream({
+    link: episodeUrl,
+    type: "movie",
+    signal: new AbortController().signal,
+    providerContext: vidoutImdbContext,
+  });
+  assert.equal(vidoutImdbStreams.length, 0, "IMDb IDs without a TMDB mapping must not resolve to a guessed media URL");
+  assert.equal(vidoutImdbLookupCount, 0, "VIDOUT must not query its movie endpoint with an IMDb ID");
 
   console.log("MultiMovies playable-media-only regression tests passed");
 }

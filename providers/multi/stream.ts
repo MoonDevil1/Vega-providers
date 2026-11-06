@@ -221,63 +221,62 @@ function parseServers(html: string, cheerio: any): ServerEntry[] {
 /* VIDOUT: try both IMDB (tt…) and TMDB numeric. Try /movie/ and /hls/movie/. */
 async function resolveVidout(
   url: string,
-  _mediaType: MediaType,
+  mediaType: MediaType,
   signal: AbortSignal,
   ctx: ProviderContext,
 ): Promise<Stream[]> {
   const out: Stream[] = [];
   const RAW = "https://raw.githubusercontent.com/Watchout2025/api/refs/heads/main";
 
-  // mediaId as it appears in the URL: tt3495030 / 1269325
-  const idMatch = url.match(/\/movie\/([^/?#]+)/);
+  // The current VIDOUT resolver only has a confirmed movie lookup contract.
+  // Do not treat a TV episode URL as a movie, and never scrape its generic
+  // player page for a default/sample playlist.
+  if (mediaType !== "movie") return out;
+
+  const idMatch = url.match(/\/movie\/([^/?#]+)/i);
   if (!idMatch) return out;
-  const primaryId = idMatch[1];
 
-  // Candidate id set: primary, and any ?tmdb= query override
-  const candidates: string[] = [primaryId];
+  // VIDOUT's API is keyed by TMDB for reliable movie matching. An IMDb
+  // tt-id is not interchangeable with a TMDB id; require an explicit TMDB
+  // mapping instead of probing an IMDb id and potentially accepting a
+  // unrelated fallback playlist.
+  let tmdbId = "";
   try {
-    const u = new URL(url);
-    const t = u.searchParams.get("tmdb");
-    if (t && candidates.indexOf(t) < 0) candidates.push(t);
+    const parsed = new URL(url);
+    tmdbId = String(parsed.searchParams.get("tmdb") || parsed.searchParams.get("tmdb_id") || "").trim();
   } catch {}
+  if (!tmdbId && /^\d+$/.test(idMatch[1])) tmdbId = idMatch[1];
+  if (!/^\d+$/.test(tmdbId)) {
+    console.warn("[stream] VIDOUT skipped: a numeric TMDB movie ID is required");
+    return out;
+  }
 
-  const paths = [
-    "/hls/movie/",
-    "/movie/",
-    "/hls/",
-    "/",
-  ];
-
-  outer:
-  for (let i = 0; i < candidates.length; i++) {
-    const id = candidates[i];
-    for (let j = 0; j < paths.length; j++) {
-      const href = RAW + paths[j] + id;
-      try {
-        const r = await ctx.axios.get(href, {
-          headers: Object.assign({}, BASE_HEADERS, {
-            Referer: "https://vidout.pages.dev/",
-          }),
-          signal,
-        });
-        const body = String(r.data || "").trim();
-        // Expect raw text: either a URL, or a JSON object with a url field
-        let hlsUrl = "";
-        if (body.indexOf("http") === 0) {
-          hlsUrl = body.split(/\s+/)[0];
-        } else if (body.charAt(0) === "{") {
-          try {
-            const obj = JSON.parse(body);
-            hlsUrl = String(obj.url || obj.hls || obj.link || "");
-          } catch {}
-        }
-        if (hlsUrl && hlsUrl.indexOf("http") === 0) {
-          out.push({ server: "VIDOUT", link: hlsUrl, type: "m3u8" });
-          break outer;
-        }
-      } catch {
-        // try next path/id
+  // Only request title-specific endpoints. Generic /hls and / routes may
+  // return a provider's default playlist rather than this requested title.
+  const paths = ["/hls/movie/", "/movie/"];
+  for (const path of paths) {
+    const href = RAW + path + encodeURIComponent(tmdbId);
+    try {
+      const response = await ctx.axios.get(href, {
+        headers: Object.assign({}, BASE_HEADERS, { Referer: "https://vidout.pages.dev/" }),
+        signal,
+      });
+      const body = String(response.data || "").trim();
+      let hlsUrl = "";
+      if (/^https?:\/\//i.test(body)) {
+        hlsUrl = body.split(/\s+/)[0];
+      } else if (body.charAt(0) === "{") {
+        try {
+          const obj = JSON.parse(body);
+          hlsUrl = String(obj.url || obj.hls || obj.link || "");
+        } catch {}
       }
+      if (hlsUrl && /^https?:\/\//i.test(hlsUrl) && /\.m3u8(?:[?#]|$)/i.test(hlsUrl)) {
+        out.push({ server: "VIDOUT", link: hlsUrl, type: "m3u8" });
+        break;
+      }
+    } catch {
+      // Try the next title-specific endpoint only.
     }
   }
   return out;
@@ -395,8 +394,10 @@ async function routeServer(
     return vidboltExtractor(url, signal, ctx.axios, ctx.cheerio, h, ctx);
   }
   if (VIDOUT_RE.test(url)) {
-    const resolved = await resolveVidout(url, mediaType, signal, ctx);
-    return resolved.length ? resolved : resolvePublicEmbed(url, signal, ctx);
+    // VIDOUT's generic embed scraper can pick up a default/sample playlist
+    // unrelated to the requested title. Only return a stream when the
+    // dedicated VIDOUT resolver confirms the requested movie ID.
+    return resolveVidout(url, mediaType, signal, ctx);
   }
   if (FILMU_RE.test(url)) {
     return resolveFilmu(url, mediaType, signal, ctx);
@@ -484,6 +485,137 @@ function detectMediaType(type: string, link: string, html: string): MediaType {
   if (/\/movie\//i.test(link) || /\/film\//i.test(link)) return "movie";
   if (/\/tv\//i.test(html)) return "tv";
   return "movie";
+}
+
+/* ================================================================== */
+/*  Public server discovery + selected-server resolution API            */
+/*  New clients can list all advertised servers before resolving one.   */
+/*  The legacy getStream() API remains available below for older apps.  */
+/* ================================================================== */
+
+export interface MultiMoviesServer {
+  id: string;
+  name: string;
+  url: string;
+  index: number;
+  pageUrl: string;
+}
+
+export async function getServers({
+  link,
+  type,
+  signal,
+  providerContext,
+}: {
+  link: string;
+  type: string;
+  signal: AbortSignal;
+  providerContext: ProviderContext;
+}): Promise<MultiMoviesServer[]> {
+  const { axios, cheerio } = providerContext;
+  let html = "";
+  try {
+    const referer = (() => { try { return new URL(link).origin + "/"; } catch { return REFERER; } })();
+    const response = await axios.get(link, {
+      headers: { ...BASE_HEADERS, ...(providerContext.commonHeaders || {}), Referer: referer },
+      signal,
+      timeout: 18000,
+      maxRedirects: 5,
+    });
+    html = String(response.data || "");
+  } catch (error: any) {
+    console.warn("[stream] server discovery page load failed:", error?.message || error);
+    return [];
+  }
+
+  let pageUrl = link;
+  let servers = parseServers(html, cheerio);
+  if (!servers.length) {
+    const candidates: string[] = [];
+    const addCandidate = (raw: string) => {
+      try {
+        const candidate = new URL(raw, link).toString();
+        if (/\/watch\/(?:movie|tv|series)\//i.test(candidate) && !candidates.includes(candidate)) {
+          candidates.push(candidate);
+        }
+      } catch {}
+    };
+    try {
+      const $ = cheerio.load(html);
+      $("[href], [data-href], [data-url], iframe[src]").each((_i: number, node: any) => {
+        const el = $(node);
+        addCandidate(String(el.attr("href") || el.attr("data-href") || el.attr("data-url") || el.attr("src") || "").trim());
+      });
+    } catch {}
+    const rawPaths = html.match(/(?:https?:\\?\/\\?\/[^"'\\s<>]+)?\/watch\/(?:movie|tv|series)\/[^"'\\s<>]+/gi) || [];
+    for (const raw of rawPaths) addCandidate(raw.replace(/\\\//g, "/"));
+    for (const candidate of candidates.slice(0, 3)) {
+      try {
+        const response = await axios.get(candidate, {
+          headers: { ...BASE_HEADERS, Referer: link },
+          signal,
+          timeout: 10000,
+          maxRedirects: 4,
+        });
+        const candidateHtml = String(response.data || "");
+        const parsed = parseServers(candidateHtml, cheerio);
+        if (parsed.length) {
+          pageUrl = candidate;
+          servers = parsed;
+          break;
+        }
+      } catch (error: any) {
+        console.warn("[stream] watch page discovery failed:", error?.message || error);
+      }
+    }
+  }
+
+  return servers.map((server) => ({ ...server, pageUrl }));
+}
+
+export async function resolveServer({
+  server,
+  type,
+  signal,
+  providerContext,
+}: {
+  server: MultiMoviesServer;
+  type: string;
+  signal: AbortSignal;
+  providerContext: ProviderContext;
+}): Promise<Stream[]> {
+  if (!server || !/^https?:\/\//i.test(server.url)) return [];
+  const mediaType = detectMediaType(type, server.pageUrl || server.url, "");
+  const budget = /streams\.iqsmartgames\.com\/embed\//i.test(server.url)
+    ? TIMEOUTS.IQST
+    : (CINEVERSE_RE.test(server.url) || /cineverse/i.test(server.name))
+      ? TIMEOUTS.Cineverse
+      : (/vidout/i.test(server.name) || VIDOUT_RE.test(server.url))
+        ? TIMEOUTS.VIDOUT
+        : (TIMEOUTS[server.name] || TIMEOUTS.default);
+
+  try {
+    const resolved = await raceWithAbort(
+      (innerSignal) => {
+        const direct = directMediaStream(server.url, server.name);
+        return direct.length
+          ? Promise.resolve(direct)
+          : routeServer(server.url, mediaType, innerSignal, providerContext, server.pageUrl || REFERER);
+      },
+      budget,
+      server.name,
+    );
+    return resolved.filter((item) =>
+      !!item?.link && String(item.type || "").toLowerCase() !== "iframe" &&
+      /^(m3u8|mpd|mp4)$/i.test(String(item.type || directMediaType(item.link) || "")),
+    ).map((item) => ({
+      ...item,
+      server: server.name + " / " + (item.server || "stream"),
+    }));
+  } catch (error: any) {
+    console.warn("[stream] selected server failed: " + server.name + ": " + (error?.message || error));
+    return [];
+  }
 }
 
 /* ================================================================== */
