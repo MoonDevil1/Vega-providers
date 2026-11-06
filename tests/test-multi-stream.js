@@ -175,6 +175,52 @@ async function main() {
     "modern Cineverse StreamHG mirror must resolve to its playable HLS URL",
   );
 
+
+  // Desktop's provider bridge has a limited pending-operation budget. Keep
+  // the provider's own resolver fan-out bounded so a page with many healthy
+  // server buttons does not start every timeout/request simultaneously.
+  const fanoutServers = Array.from({ length: 6 }, (_, index) => ({
+    name: "Mirror " + index,
+    url: "https://mirror" + index + ".example.test/embed",
+  }));
+  const fanoutHtml = '<div>' + fanoutServers.map((server, index) =>
+    '<button data-id="mirror-' + index + '" data-server-index="' + index +
+    '" data-url="' + server.url + '"><span class="server-name">' +
+    server.name + '</span></button>'
+  ).join("") + '</div>';
+  let activeMirrorRequests = 0;
+  let maxActiveMirrorRequests = 0;
+  const fanoutContext = {
+    axios: {
+      async get(url) {
+        if (url === episodeUrl) return { data: fanoutHtml, status: 200, headers: {} };
+        if (/^https:\\/\\/mirror\\d+\\.example\\.test\\/embed$/.test(url)) {
+          activeMirrorRequests++;
+          maxActiveMirrorRequests = Math.max(maxActiveMirrorRequests, activeMirrorRequests);
+          await new Promise((resolve) => setTimeout(resolve, 30));
+          activeMirrorRequests--;
+          const id = url.match(/mirror(\\d+)/)[1];
+          return {
+            data: '<script>var source="https://cdn.example.test/mirror' + id + '.m3u8";</script>',
+            status: 200,
+            headers: {},
+          };
+        }
+        throw new Error("Unexpected fan-out test URL: " + url);
+      },
+    },
+    cheerio: null,
+  };
+  const fanoutStreams = await getStream({
+    link: episodeUrl,
+    type: "tv",
+    signal: new AbortController().signal,
+    providerContext: fanoutContext,
+  });
+  assert.equal(fanoutStreams.length, 6, "all healthy mirrors must still resolve");
+  assert.ok(maxActiveMirrorRequests <= 2,
+    "server resolvers must stay within the two-server concurrency limit");
+
   console.log("MultiMovies playable-media-only regression tests passed");
 }
 
