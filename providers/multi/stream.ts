@@ -218,6 +218,52 @@ function parseServers(html: string, cheerio: any): ServerEntry[] {
 /*  Inline resolvers (VIDOUT, Filmu)                                   */
 /* ================================================================== */
 
+/* VIDOUT sometimes labels a storyboard/tile playlist as its highest video
+ * quality. Do not pass that master playlist to the player: it may select the
+ * ~2-minute tile track instead of the full-length video variants. */
+async function expandVidoutMaster(
+  masterUrl: string,
+  signal: AbortSignal,
+  ctx: ProviderContext,
+): Promise<Stream[]> {
+  try {
+    const response = await ctx.axios.get(masterUrl, {
+      headers: Object.assign({}, BASE_HEADERS, { Referer: "https://img.rousav.tech/" }),
+      signal,
+      timeout: 10000,
+    });
+    const body = String(response.data || "");
+    if (!/^\s*#EXTM3U/m.test(body) || !/#EXT-X-STREAM-INF:/i.test(body)) return [];
+
+    const lines = body.split(/\r?\n/);
+    const variants: Stream[] = [];
+    let attributes = "";
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      if (/^#EXT-X-STREAM-INF:/i.test(line)) {
+        attributes = line;
+        continue;
+      }
+      if (!attributes || line.startsWith("#")) continue;
+      const streamInfo = attributes;
+      attributes = "";
+      // "tiles.m3u8" is a storyboard made of thumbnail images, not video.
+      if (/(?:^|[\/])(?:tiles?|storyboard|thumbnails?)(?:[-_.\/]|$)/i.test(line)) continue;
+      let variantUrl = "";
+      try { variantUrl = new URL(line, masterUrl).toString(); } catch { continue; }
+      const resolution = streamInfo.match(/RESOLUTION=\d+x(\d+)/i);
+      const height = resolution ? Number(resolution[1]) : 0;
+      const quality = height >= 2000 ? "2160" : height >= 1000 ? "1080" : height >= 650 ? "720" : height >= 400 ? "480" : "HD";
+      variants.push({ server: "VIDOUT " + quality + "p", link: variantUrl, type: "m3u8", quality });
+    }
+    return variants;
+  } catch (error: any) {
+    console.warn("[stream] VIDOUT master playlist inspection failed:", error?.message || error);
+    return [];
+  }
+}
+
 /* VIDOUT: try both IMDB (tt…) and TMDB numeric. Try /movie/ and /hls/movie/. */
 async function resolveVidout(
   url: string,
@@ -272,7 +318,9 @@ async function resolveVidout(
         } catch {}
       }
       if (hlsUrl && /^https?:\/\//i.test(hlsUrl) && /\.m3u8(?:[?#]|$)/i.test(hlsUrl)) {
-        out.push({ server: "VIDOUT", link: hlsUrl, type: "m3u8" });
+        const variants = await expandVidoutMaster(hlsUrl, signal, ctx);
+        if (variants.length) out.push(...variants);
+        else out.push({ server: "VIDOUT", link: hlsUrl, type: "m3u8" });
         break;
       }
     } catch {
