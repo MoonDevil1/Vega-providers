@@ -546,8 +546,8 @@ async function resolveEmbedMedia(
   // Collect every relevant URL attribute independently. The live IQSmart
   // player uses anchors with both href="#" and data-link="/evid/...", so a
   // single alternation incorrectly captures only href and skips the evid page.
-  const tagRe = /<(?:iframe|source|a|button|div|li)\\b[^>]*>/gi;
-  const attrRe = /\\b(?:src|data-src|data-link|data-url|href)\\s*=\\s*(["'])(.*?)\\1/gi;
+  const tagRe = /<(?:iframe|source|a|button|div|li)\b[^>]*>/gi;
+  const attrRe = /\b(?:src|data-src|data-link|data-url|href)\s*=\s*(["'])(.*?)\1/gi;
   const frames: string[] = [];
   let tagMatch: RegExpExecArray | null;
   while ((tagMatch = tagRe.exec(decoded)) !== null) {
@@ -563,8 +563,8 @@ async function resolveEmbedMedia(
         const frameHost = hostOf(frameUrl);
         if (/^https?:/i.test(frameUrl) && normalized.toString() !== current.toString() &&
             !seen[normalized.toString()] &&
-            (KNOWN_XVID_HOSTS[frameHost] || /iqsmartgames|rpmhub|p2pplay|uns\\.bio|hanerix|morencius|vibuxer|n1mwq/i.test(frameHost) ||
-             /\\/evid\\//i.test(frameUrl)) &&
+            (KNOWN_XVID_HOSTS[frameHost] || /iqsmartgames|rpmhub|p2pplay|uns\.bio|hanerix|morencius|vibuxer|n1mwq/i.test(frameHost) ||
+             /\/evid\//i.test(frameUrl)) &&
             frames.indexOf(frameUrl) < 0) frames.push(frameUrl);
       } catch {}
     }
