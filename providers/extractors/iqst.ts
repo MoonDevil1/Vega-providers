@@ -488,8 +488,11 @@ async function resolveEmbedMedia(
   pageUrl: string, axios: any, headers: Record<string, string>,
   signal?: AbortSignal, depth: number = 0, seen: Record<string, boolean> = {},
 ): Promise<Stream[]> {
-  if (depth > 4 || seen[pageUrl]) return [];
-  seen[pageUrl] = true;
+  const pageKey = new URL(pageUrl);
+  pageKey.hash = "";
+  const normalizedPageUrl = pageKey.toString();
+  if (depth > 4 || seen[normalizedPageUrl] || Object.keys(seen).length >= 14) return [];
+  seen[normalizedPageUrl] = true;
   let html = "";
   try {
     const origin = new URL(pageUrl).origin;
