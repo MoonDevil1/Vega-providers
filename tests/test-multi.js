@@ -10,7 +10,7 @@ function episodeCard(number, name, season) {
   return '<div class="cinejoy-ep-card" id="ep-item-1-' + number + '">' +
     '<a class="cinejoy-ep-thumb-link" href="' + seriesUrl + '/season/' + (season || 1) + '/episode/' + number + '">' +
     '<span class="cinejoy-ep-badge-num">E' + number + '</span></a>' +
-    '<a class="cinejoy-ep-name" title="' + name + '" href="' + seriesUrl + '/season/1/episode/' + number + '">' + name + '</a></div>';
+    '<a class="cinejoy-ep-name" title="' + name + '" href="' + seriesUrl + '/season/' + (season || 1) + '/episode/' + number + '">' + name + '</a></div>';
 }
 
 function seasonPage(options) {
