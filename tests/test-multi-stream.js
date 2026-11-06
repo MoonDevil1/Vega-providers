@@ -31,7 +31,7 @@ const episodeHtml = '<script>const watchConfig = ' + JSON.stringify({
 
 const iqHtml = [
   '<script>let FinalID = "34391"; let idType = "tmdbid"; let myKey = "test-key"; let season = "1"; let epname = "1";</script>',
-  '<a data-link="' + evidUrl + '">Open source</a>',
+  '<a href="#" data-link="' + evidUrl + '">Open source</a>',
 ].join("\n");
 
 const evidHtml = '<ul>' +
