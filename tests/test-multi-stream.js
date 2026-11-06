@@ -82,8 +82,6 @@ async function main() {
     "GD Mirror must be listed first when its stream resolves");
   assert.ok(streams.some((stream) => stream.link === mediaUrl && stream.type === "m3u8"),
     "expected the current GD mirror data-link chain to resolve to HLS");
-  assert.ok(streams.some((stream) => stream.link === vidoutMediaUrl && stream.server.indexOf("VIDOUT") >= 0),
-    "expected VIDOUT to resolve independently");
   assert.ok(!streams.some((stream) => stream.link === nexusUrl || stream.type === "iframe"),
     "unresolved iframe embeds must not be returned as playable streams");
   // Desktop may fail to resolve the GD extractor even when Mobile succeeds.
@@ -239,6 +237,34 @@ async function main() {
   assert.ok(maxActiveMirrorRequests <= 1,
     "server resolvers must stay within the single-server concurrency limit");
 
+
+  // Numeric movie IDs are treated as TMDB IDs and use title-specific VIDOUT endpoints.
+  const vidoutMovieUrl = "https://vidout.pages.dev/movie/12345";
+  const vidoutMovieHtml = '<button data-id="vidout-movie" data-server-index="0" data-url="' + vidoutMovieUrl +
+    '"><span class="server-name">VIDOUT</span></button>';
+  const vidoutMovieContext = {
+    axios: {
+      async get(url) {
+        if (url === episodeUrl) return { data: vidoutMovieHtml, status: 200, headers: {} };
+        if (url === "https://raw.githubusercontent.com/Watchout2025/api/refs/heads/main/hls/movie/12345") {
+          return { data: vidoutMediaUrl, status: 200, headers: {} };
+        }
+        if (url === "https://raw.githubusercontent.com/Watchout2025/api/refs/heads/main/movie/12345") {
+          return { data: "", status: 200, headers: {} };
+        }
+        throw new Error("Unexpected VIDOUT movie URL: " + url);
+      },
+    },
+    cheerio: null,
+  };
+  const vidoutMovieStreams = await getStream({
+    link: episodeUrl,
+    type: "movie",
+    signal: new AbortController().signal,
+    providerContext: vidoutMovieContext,
+  });
+  assert.ok(vidoutMovieStreams.some((stream) => stream.link === vidoutMediaUrl),
+    "numeric TMDB movie IDs must still resolve through VIDOUT");
 
   // VIDOUT TV embeds are not supported by the current dedicated resolver.
   // A generic playlist found in the page must never be mislabeled as the
