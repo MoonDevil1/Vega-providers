@@ -468,12 +468,20 @@ function serverPreferenceMatches(server: string, preference: string): boolean {
   if (wanted === "gdmirror") return name.includes("gdmirror") || name.includes("googledrive") || name === "gd";
   return name.includes(wanted);
 }
+function serverPriorityRank(server: string, preferredServer: string): number {
+  if (serverPreferenceMatches(server, "gdmirror")) return 0;
+  if (serverPreferenceMatches(server, "cineverse")) return 1;
+  if (preferredServer && preferredServer !== "auto" &&
+      preferredServer !== "gdmirror" && preferredServer !== "cineverse" &&
+      serverPreferenceMatches(server, preferredServer)) return 2;
+  return 3;
+}
+
 function orderPreferredStreams(streams: StreamEx[], preferredServer: string): StreamEx[] {
-  return streams.map((stream, index) => ({ stream, index })).sort((a, b) => {
-    const aServer = serverPreferenceMatches(a.stream.server, preferredServer) ? 0 : 1;
-    const bServer = serverPreferenceMatches(b.stream.server, preferredServer) ? 0 : 1;
-    return aServer - bServer || a.index - b.index;
-  }).map((item) => item.stream);
+  return streams.map((stream, index) => ({ stream, index })).sort((a, b) =>
+    serverPriorityRank(a.stream.server, preferredServer) -
+    serverPriorityRank(b.stream.server, preferredServer) || a.index - b.index
+  ).map((item) => item.stream);
 }
 
 function detectMediaType(type: string, link: string, html: string): MediaType {
@@ -721,8 +729,8 @@ export async function getStream({
   }
   if (preferredServer !== "auto") {
     servers = servers.slice().sort((a, b) =>
-      Number(serverPreferenceMatches(b.name, preferredServer)) -
-      Number(serverPreferenceMatches(a.name, preferredServer)) || a.index - b.index
+      serverPriorityRank(a.name, preferredServer) -
+      serverPriorityRank(b.name, preferredServer) || a.index - b.index
     );
   }
 
