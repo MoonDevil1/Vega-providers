@@ -6,9 +6,9 @@ const { getEpisodes } = require("../dist/multi/episodes.js");
 const base = "https://m1.multimovies.courses";
 const seriesUrl = base + "/series/test-show";
 
-function episodeCard(number, name) {
+function episodeCard(number, name, season) {
   return '<div class="cinejoy-ep-card" id="ep-item-1-' + number + '">' +
-    '<a class="cinejoy-ep-thumb-link" href="' + seriesUrl + '/season/1/episode/' + number + '">' +
+    '<a class="cinejoy-ep-thumb-link" href="' + seriesUrl + '/season/' + (season || 1) + '/episode/' + number + '">' +
     '<span class="cinejoy-ep-badge-num">E' + number + '</span></a>' +
     '<a class="cinejoy-ep-name" title="' + name + '" href="' + seriesUrl + '/season/1/episode/' + number + '">' + name + '</a></div>';
 }
@@ -31,7 +31,7 @@ function seasonPage(options) {
     '<option value="1"' + (season === 1 ? ' selected=""' : '') + '>Season 1 · 3 episodes</option>' +
     '<option value="2"' + (season === 2 ? ' selected=""' : '') + '>Season 2 · 1 episode</option>' +
     '</select></div><div class="cinejoy-season-grid active" id="cinejoy-season-' + season + '">' +
-    episodes.map((episode) => episodeCard(episode.number, episode.name)).join("") +
+    episodes.map((episode) => episodeCard(episode.number, episode.name, season)).join("") +
     '</div></section></body></html>';
 }
 
