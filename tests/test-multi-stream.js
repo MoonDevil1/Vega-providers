@@ -218,8 +218,8 @@ async function main() {
     providerContext: fanoutContext,
   });
   assert.equal(fanoutStreams.length, 6, "all healthy mirrors must still resolve");
-  assert.ok(maxActiveMirrorRequests <= 2,
-    "server resolvers must stay within the two-server concurrency limit");
+  assert.ok(maxActiveMirrorRequests <= 1,
+    "server resolvers must stay within the single-server concurrency limit");
 
   console.log("MultiMovies playable-media-only regression tests passed");
 }
