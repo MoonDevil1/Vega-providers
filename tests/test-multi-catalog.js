@@ -47,11 +47,11 @@ const providerContext = {
 
 (async () => {
   const expectedHomeCategories = [
-    ["Featured", "featured"],
-    ["Movies", "movies"],
-    ["Series", "series"],
-    ["Top Movies", "top-imdb-movies"],
-    ["Top Series", "top-imdb-series"],
+    ["Recently Added Movies", "latest-movies"],
+    ["Recently Added Series", "latest-series"],
+    ["Most Watched", "most-watched"],
+    ["Top Rated", "top-rated"],
+    ["Latest Episodes", "episodes"],
   ];
   assert.deepEqual(
     catalog.map((item) => [item.title, item.filter]),
@@ -67,6 +67,10 @@ const providerContext = {
   assert.ok(catalog.length <= 8, "home catalog must stay small to avoid a large concurrent request burst");
 
   const cases = [
+    ["latest-movies", "/catalog", "type", "movie", "sort", "latest"],
+    ["latest-series", "/catalog", "type", "tv", "sort", "latest"],
+    ["most-watched", "/catalog", "sort", "views"],
+    ["top-rated", "/catalog", "sort", "rating"],
     ["featured", "/catalog", "featured", "1"],
     ["movies", "/movies", null, null],
     ["series", "/series", null, null],
@@ -76,7 +80,7 @@ const providerContext = {
     ["provider/amazon-prime", "/provider/amazon-prime", null, null],
   ];
 
-  for (const [filter, pathname, queryKey, queryValue] of cases) {
+  for (const [filter, pathname, queryKey, queryValue, extraKey, extraValue] of cases) {
     requests.length = 0;
     const posts = await getPosts({ filter, page: 2, providerContext });
     assert.equal(posts.length, 1, filter + " should parse the poster card");
@@ -86,6 +90,7 @@ const providerContext = {
     assert.equal(requests[0].pathname, pathname);
     assert.equal(requests[0].searchParams.get("page"), "2");
     if (queryKey) assert.equal(requests[0].searchParams.get(queryKey), queryValue);
+    if (extraKey) assert.equal(requests[0].searchParams.get(extraKey), extraValue);
     if (filter === "top-imdb-movies" || filter === "top-imdb-series") {
       assert.equal(requests[0].searchParams.get("top"), "1");
     }
