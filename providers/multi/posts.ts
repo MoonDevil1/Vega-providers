@@ -105,7 +105,17 @@ export async function getPosts({
 
   // These routes match the current MultiMovies site instead of mapping
   // every catalog category to a generic genre query.
-  if (route === "featured") {
+  if (route === "latest-movies") {
+    urlObject.searchParams.set("type", "movie");
+    urlObject.searchParams.set("sort", "latest");
+  } else if (route === "latest-series") {
+    urlObject.searchParams.set("type", "tv");
+    urlObject.searchParams.set("sort", "latest");
+  } else if (route === "most-watched") {
+    urlObject.searchParams.set("sort", "views");
+  } else if (route === "top-rated") {
+    urlObject.searchParams.set("sort", "rating");
+  } else if (route === "featured") {
     urlObject.searchParams.set("featured", "1");
   } else if (route === "movies") {
     urlObject.pathname = "/movies";
