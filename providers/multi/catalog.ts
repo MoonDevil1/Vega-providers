@@ -1,11 +1,12 @@
-// Keep the homepage focused on the five current MultiMovies catalog endpoints.
-// Desktop loads every home row concurrently, so browse-only shelves stay in genres.
+// Use the site's canonical catalog filters; these are more reliable than
+// the legacy /movies, /series, and IMDb-specific homepage routes.
+// Keep five shelves to avoid excessive concurrent requests in Vega Desktop.
 export const catalog = [
-  { title: "Featured", filter: "featured" },
-  { title: "Movies", filter: "movies" },
-  { title: "Series", filter: "series" },
-  { title: "Top Movies", filter: "top-imdb-movies" },
-  { title: "Top Series", filter: "top-imdb-series" },
+  { title: "Recently Added Movies", filter: "latest-movies" },
+  { title: "Recently Added Series", filter: "latest-series" },
+  { title: "Most Watched", filter: "most-watched" },
+  { title: "Top Rated", filter: "top-rated" },
+  { title: "Latest Episodes", filter: "episodes" },
 ];
 
 export const genres = [
