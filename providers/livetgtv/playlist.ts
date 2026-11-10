@@ -23,7 +23,7 @@ function mediaType(rawUrl: string): LiveChannel["type"] | null {
     const path = new URL(rawUrl).pathname.toLowerCase();
     if (path.endsWith(".m3u8")) return "m3u8";
     if (path.endsWith(".mpd")) return "mpd";
-    if (/\\.(mp4|m4v)$/i.test(path)) return "mp4";
+    if (/\.(mp4|m4v)$/i.test(path)) return "mp4";
   } catch {}
   return null;
 }
@@ -87,7 +87,7 @@ export function parsePlaylist(source: string): LiveChannel[] {
     current = null;
   };
 
-  for (const rawLine of String(source || "").split(/\\r?\\n/)) {
+  for (const rawLine of String(source || "").split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line) continue;
     if (/^#EXTINF:/i.test(line)) {
@@ -95,7 +95,7 @@ export function parsePlaylist(source: string): LiveChannel[] {
       current = { info: line, extras: [] };
     } else if (current && line.startsWith("#")) {
       current.extras.push(line);
-    } else if (current && /^https?:\\/\\//i.test(line)) {
+    } else if (current && /^https?:\/\//i.test(line)) {
       current.url = line;
       finish();
     }
@@ -117,7 +117,7 @@ export async function loadChannels(ctx: ProviderContext): Promise<LiveChannel[]>
   const source = typeof response.data === "string"
     ? response.data
     : String(response.data ?? "");
-  if (!/^\\s*#EXTM3U/m.test(source)) {
+  if (!/^\s*#EXTM3U/m.test(source)) {
     throw new Error("LiveTGTV did not return a valid M3U playlist");
   }
   return parsePlaylist(source);
@@ -131,7 +131,7 @@ export function channelId(link: string): string {
   try {
     const parsed = new URL(link);
     if (parsed.protocol !== "livetgtv:" || parsed.hostname !== "channel") return "";
-    return decodeURIComponent(parsed.pathname.replace(/^\\//, ""));
+    return decodeURIComponent(parsed.pathname.replace(/^\//, ""));
   } catch {
     return "";
   }
