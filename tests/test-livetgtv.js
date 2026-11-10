@@ -27,10 +27,14 @@ const providerContext = {
 
 (async () => {
   const all = await getPosts({ filter: "all", page: 1, providerContext });
-  assert.equal(all.length, 2, "only non-DRM, non-cookie streams should be listed");
+  assert.equal(all.length, 4, "all playlist channels should be listed, including protected entries");
   assert.equal(all[0].title, "Free News");
   assert.equal(all[0].tag, "News");
   assert.equal(all[0].image, "https://example.com/news.png");
+  assert.equal(all[2].title, "Protected Channel");
+  assert.equal(all[2].cornerTag, "DRM");
+  assert.equal(all[3].title, "Cookie Channel");
+  assert.equal(all[3].cornerTag, "Login");
 
   const news = await getPosts({ filter: "group:News", page: 1, providerContext });
   assert.equal(news.length, 1);
@@ -43,6 +47,20 @@ const providerContext = {
   });
   assert.equal(search.length, 1);
   assert.equal(search[0].title, "Public TV");
+
+  const protectedStreams = await getStream({
+    link: all[2].link,
+    type: "movie",
+    providerContext,
+  });
+  assert.equal(protectedStreams.length, 0, "DRM entries remain listed but are not played without player/license support");
+
+  const cookieStreams = await getStream({
+    link: all[3].link,
+    type: "movie",
+    providerContext,
+  });
+  assert.equal(cookieStreams.length, 0, "cookie-auth entries remain listed but are not played without secure auth support");
 
   const meta = await getMeta({ link: all[0].link, providerContext });
   assert.equal(meta.title, "Free News");
