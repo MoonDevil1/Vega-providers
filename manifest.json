@@ -7,5 +7,13 @@
     "type": "global",
     "hasSettings": true,
     "disabled": false
+  },
+  {
+    "display_name": "LiveTGTV",
+    "value": "livetgtv",
+    "version": "1.0.0",
+    "icon": "",
+    "type": "global",
+    "disabled": false
   }
 ]
