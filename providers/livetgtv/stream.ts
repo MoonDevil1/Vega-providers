@@ -14,19 +14,20 @@ export async function getStream({
   const id = channelId(link);
   if (!id) return [];
 
-  // Resolve against the latest playlist at playback time so signed media URLs
-  // are refreshed instead of being stored in the provider or Git history.
+  // Refresh signed URLs and per-channel headers immediately before playback.
   const channel = (await loadChannels(providerContext)).find((item) => item.id === id);
-  if (!channel || channel.requiresDrm || channel.requiresAuthorization) return [];
+  if (!channel || channel.requiresDrm) return [];
 
-  const headers: Record<string, string> = {};
-  if (channel.userAgent) headers["User-Agent"] = channel.userAgent;
+  const hasAuthHeader = Object.keys(channel.headers).some((key) =>
+    /^(cookie|authorization)$/i.test(key)
+  );
+  if (channel.requiresAuthorization && !hasAuthHeader) return [];
 
   return [{
     server: "LiveTGTV",
     link: channel.url,
     type: channel.type,
     quality: "Auto",
-    ...(Object.keys(headers).length ? { headers } : {}),
+    ...(Object.keys(channel.headers).length ? { headers: channel.headers } : {}),
   }];
 }
