@@ -34,7 +34,7 @@ function mediaType(rawUrl: string): LiveChannel["type"] | null {
 function setHeader(headers: Record<string, string>, name: string, value: string): void {
   const key = name.trim();
   const content = value.trim();
-  if (!key || !content || /[\\r\\n]/.test(key + content)) return;
+  if (!key || !content || key.includes("\r") || key.includes("\n") || content.includes("\r") || content.includes("\n")) return;
   const existing = Object.keys(headers).find((item) => item.toLowerCase() === key.toLowerCase());
   headers[existing || key] = content;
 }
@@ -54,7 +54,7 @@ function parseHeaderPayload(raw: string, headers: Record<string, string>): void 
       return;
     }
   } catch {}
-  for (const pair of value.split(/[&;\\n]/)) {
+  for (const pair of value.split(/[&;]/)) {
     const index = pair.indexOf("=");
     if (index <= 0) continue;
     try {
@@ -133,7 +133,7 @@ export function parsePlaylist(source: string): LiveChannel[] {
     current = null;
   };
 
-  for (const rawLine of String(source || "").split(/\\r?\\n/)) {
+  for (const rawLine of String(source || "").split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line) continue;
     if (/^#EXTINF:/i.test(line)) {
@@ -141,7 +141,7 @@ export function parsePlaylist(source: string): LiveChannel[] {
       current = { info: line, extras: [] };
     } else if (current && line.startsWith("#")) {
       current.extras.push(line);
-    } else if (current && /^https?:\\/\\//i.test(line)) {
+    } else if (current && (line.startsWith("http://") || line.startsWith("https://"))) {
       current.url = line;
       finish();
     }
@@ -163,7 +163,7 @@ export async function loadChannels(ctx: ProviderContext): Promise<LiveChannel[]>
   const source = typeof response.data === "string"
     ? response.data
     : String(response.data ?? "");
-  if (!/^\\s*#EXTM3U/m.test(source)) {
+  if (!source.trimStart().startsWith("#EXTM3U")) {
     throw new Error("LiveTGTV did not return a valid M3U playlist");
   }
   return parsePlaylist(source);
@@ -177,7 +177,7 @@ export function channelId(link: string): string {
   try {
     const parsed = new URL(link);
     if (parsed.protocol !== "livetgtv:" || parsed.hostname !== "channel") return "";
-    return decodeURIComponent(parsed.pathname.replace(/^\\//, ""));
+    return decodeURIComponent(parsed.pathname.slice(1));
   } catch {
     return "";
   }
