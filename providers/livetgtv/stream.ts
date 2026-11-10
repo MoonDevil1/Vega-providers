@@ -17,7 +17,7 @@ export async function getStream({
   // Resolve against the latest playlist at playback time so signed media URLs
   // are refreshed instead of being stored in the provider or Git history.
   const channel = (await loadChannels(providerContext)).find((item) => item.id === id);
-  if (!channel) return [];
+  if (!channel || channel.requiresDrm || channel.requiresAuthorization) return [];
 
   const headers: Record<string, string> = {};
   if (channel.userAgent) headers["User-Agent"] = channel.userAgent;
