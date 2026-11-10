@@ -21,6 +21,7 @@ export async function getPosts({
     link: channelLink(channel.id),
     image: channel.logo,
     tag: channel.group,
+    cornerTag: channel.requiresDrm ? "DRM" : channel.requiresAuthorization ? "Login" : "LIVE",
   }));
 }
 
