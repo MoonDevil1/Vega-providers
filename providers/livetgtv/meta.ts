@@ -17,7 +17,7 @@ export async function getMeta({
   return {
     title: channel.name,
     image: channel.logo,
-    synopsis: channel.group + " • Live TV",
+    synopsis: channel.group + " • Live TV" + (channel.requiresDrm ? " • DRM required" : channel.requiresAuthorization ? " • Provider authorization required" : ""),
     imdbId: "",
     type: "movie",
     tags: [channel.group, "Live TV"],
