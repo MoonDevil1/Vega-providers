@@ -11,6 +11,8 @@ export interface LiveChannel {
   type: "m3u8" | "mpd" | "mp4";
   userAgent: string;
   description: string;
+  requiresDrm: boolean;
+  requiresAuthorization: boolean;
 }
 
 function attribute(line: string, key: string): string {
@@ -28,21 +30,12 @@ function mediaType(rawUrl: string): LiveChannel["type"] | null {
   return null;
 }
 
-function safeEntry(extras: string[]): boolean {
-  // Never import DRM license data, cookies, or per-entry authorization headers.
-  return !extras.some((line) =>
-    /^#KODIPROP:/i.test(line) ||
-    /^#EXTHTTP:/i.test(line) ||
-    /license_(?:type|key)|drm|cookie|authorization/i.test(line)
-  );
-}
-
 export function parsePlaylist(source: string): LiveChannel[] {
   const channels: LiveChannel[] = [];
   let current: { info: string; extras: string[]; url?: string } | null = null;
 
   const finish = () => {
-    if (!current || !current.url || !safeEntry(current.extras)) {
+    if (!current || !current.url) {
       current = null;
       return;
     }
@@ -70,10 +63,8 @@ export function parsePlaylist(source: string): LiveChannel[] {
     const group = attribute(current.info, "group-title") || "Other";
     const logo = attribute(current.info, "tvg-logo");
     const description = attribute(current.info, "tvg-name");
-
-    // Include the channel name in the key because playlists may reuse tvg-id
-    // for HD/SD variants. This is an identifier, not a stream credential.
     const id = (tvgId || name) + "|" + name;
+
     channels.push({
       id,
       name,
@@ -83,6 +74,13 @@ export function parsePlaylist(source: string): LiveChannel[] {
       type,
       userAgent,
       description,
+      // Record the requirement, but never copy license keys or cookie values.
+      requiresDrm: current.extras.some((line) =>
+        /^#KODIPROP:/i.test(line) || /license_(?:type|key)|drm/i.test(line)
+      ),
+      requiresAuthorization: current.extras.some((line) =>
+        /^#EXTHTTP:/i.test(line) || /cookie|authorization/i.test(line)
+      ),
     });
     current = null;
   };
