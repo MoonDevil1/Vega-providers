@@ -32,7 +32,8 @@ function mediaType(rawUrl: string): LiveChannel["type"] | null {
 }
 
 function setHeader(headers: Record<string, string>, name: string, value: string): void {
-  const key = name.trim();
+  const rawKey = name.trim();
+  const key = ({ "user-agent": "User-Agent", referer: "Referer", referrer: "Referer", origin: "Origin", cookie: "Cookie", authorization: "Authorization" } as Record<string, string>)[rawKey.toLowerCase()] || rawKey;
   const content = value.trim();
   if (!key || !content || key.includes("\r") || key.includes("\n") || content.includes("\r") || content.includes("\n")) return;
   const existing = Object.keys(headers).find((item) => item.toLowerCase() === key.toLowerCase());
