@@ -37,8 +37,10 @@ const providerContext = {
   assert.equal(all[3].cornerTag, "Login");
 
   const news = await getPosts({ filter: "group:News", page: 1, providerContext });
-  assert.equal(news.length, 1);
+  assert.equal(news.length, 2);
   assert.equal(news[0].title, "Free News");
+  assert.equal(news[1].title, "Cookie Channel");
+  assert.equal(news[1].cornerTag, "Login");
 
   const search = await getSearchPosts({
     searchQuery: "public",
