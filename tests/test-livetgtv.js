@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const { getPosts, getSearchPosts } = require("../dist/livetgtv/posts");
 const { getMeta } = require("../dist/livetgtv/meta");
 const { getStream } = require("../dist/livetgtv/stream");
+const { genres } = require("../dist/livetgtv/catalog");
 
 const fixture = [
   "#EXTM3U",
@@ -30,6 +31,9 @@ const providerContext = {
 };
 
 (async () => {
+  const groups = await genres({ providerContext });
+  assert.deepEqual(groups.map((group) => group.title), ["Entertainment", "News", "Other", "Sports"]);
+
   const all = await getPosts({ filter: "all", page: 1, providerContext });
   assert.equal(all.length, 5, "all supported playlist channels should be listed");
   assert.equal(all[0].title, "Free News");
