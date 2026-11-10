@@ -9,7 +9,7 @@ export interface LiveChannel {
   group: string;
   url: string;
   type: "m3u8" | "mpd" | "mp4";
-  userAgent: string;
+  headers: Record<string, string>;
   description: string;
   requiresDrm: boolean;
   requiresAuthorization: boolean;
@@ -22,12 +22,66 @@ function attribute(line: string, key: string): string {
 
 function mediaType(rawUrl: string): LiveChannel["type"] | null {
   try {
-    const path = new URL(rawUrl).pathname.toLowerCase();
-    if (path.endsWith(".m3u8")) return "m3u8";
-    if (path.endsWith(".mpd")) return "mpd";
-    if (/\.(mp4|m4v)$/i.test(path)) return "mp4";
+    const url = new URL(rawUrl);
+    const path = (url.pathname + url.search).toLowerCase();
+    if (/\.m3u8(?:$|[?&])/.test(path) || /[?&](?:type|format)=m3u8(?:&|$)/.test(path)) return "m3u8";
+    if (/\.mpd(?:$|[?&])/.test(path) || /[?&](?:type|format)=mpd(?:&|$)/.test(path)) return "mpd";
+    if (/\.(mp4|m4v)(?:$|[?&])/.test(path)) return "mp4";
   } catch {}
   return null;
+}
+
+function setHeader(headers: Record<string, string>, name: string, value: string): void {
+  const rawKey = name.trim();
+  const key = ({ "user-agent": "User-Agent", referer: "Referer", referrer: "Referer", origin: "Origin", cookie: "Cookie", authorization: "Authorization" } as Record<string, string>)[rawKey.toLowerCase()] || rawKey;
+  const content = value.trim();
+  if (!key || !content || key.includes("\r") || key.includes("\n") || content.includes("\r") || content.includes("\n")) return;
+  const existing = Object.keys(headers).find((item) => item.toLowerCase() === key.toLowerCase());
+  headers[existing || key] = content;
+}
+
+function parseHeaderPayload(raw: string, headers: Record<string, string>): void {
+  const value = raw.trim();
+  if (!value) return;
+  try {
+    const parsed = JSON.parse(value);
+    const source = parsed && typeof parsed === "object" && parsed.headers && typeof parsed.headers === "object"
+      ? parsed.headers
+      : parsed;
+    if (source && typeof source === "object" && !Array.isArray(source)) {
+      for (const [key, item] of Object.entries(source)) {
+        if (typeof item === "string" || typeof item === "number") setHeader(headers, key, String(item));
+      }
+      return;
+    }
+  } catch {}
+  for (const pair of value.split(/[&;]/)) {
+    const index = pair.indexOf("=");
+    if (index <= 0) continue;
+    try {
+      setHeader(headers, decodeURIComponent(pair.slice(0, index).trim()), decodeURIComponent(pair.slice(index + 1).trim()));
+    } catch {}
+  }
+}
+
+function parseEntryHeaders(extras: string[]): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const line of extras) {
+    if (/^#EXTHTTP:/i.test(line)) {
+      parseHeaderPayload(line.slice(line.indexOf(":") + 1), headers);
+    } else if (/^#KODIPROP:inputstream\.adaptive\.stream_headers=/i.test(line)) {
+      parseHeaderPayload(line.slice(line.indexOf("=") + 1), headers);
+    } else if (/^#EXTVLCOPT:http-(?:user-agent|referrer|origin|cookie|authorization)=/i.test(line)) {
+      const index = line.indexOf("=");
+      const option = line.slice(0, index).toLowerCase();
+      const name = option.endsWith("user-agent") ? "User-Agent"
+        : option.endsWith("referrer") ? "Referer"
+        : option.endsWith("origin") ? "Origin"
+        : option.endsWith("cookie") ? "Cookie" : "Authorization";
+      setHeader(headers, name, line.slice(index + 1));
+    }
+  }
+  return headers;
 }
 
 export function parsePlaylist(source: string): LiveChannel[] {
@@ -53,17 +107,17 @@ export function parsePlaylist(source: string): LiveChannel[] {
       return;
     }
 
-    const userAgentLine = current.extras.find((line) =>
-      /^#EXTVLCOPT:http-user-agent=/i.test(line)
-    );
-    const userAgent = userAgentLine
-      ? userAgentLine.slice(userAgentLine.indexOf("=") + 1).trim()
-      : "";
+    const headers = parseEntryHeaders(current.extras);
     const tvgId = attribute(current.info, "tvg-id");
     const group = attribute(current.info, "group-title") || "Other";
     const logo = attribute(current.info, "tvg-logo");
-    const description = attribute(current.info, "tvg-name");
     const id = (tvgId || name) + "|" + name;
+    const requiresDrm = current.extras.some((line) =>
+      /^#KODIPROP:.*(?:license_(?:type|key)|drm)/i.test(line)
+    );
+    const requiresAuthorization = current.extras.some((line) =>
+      /cookie|authorization/i.test(line)
+    ) || Object.keys(headers).some((key) => /^(cookie|authorization)$/i.test(key));
 
     channels.push({
       id,
@@ -72,15 +126,10 @@ export function parsePlaylist(source: string): LiveChannel[] {
       group,
       url: current.url,
       type,
-      userAgent,
-      description,
-      // Record the requirement, but never copy license keys or cookie values.
-      requiresDrm: current.extras.some((line) =>
-        /^#KODIPROP:/i.test(line) || /license_(?:type|key)|drm/i.test(line)
-      ),
-      requiresAuthorization: current.extras.some((line) =>
-        /^#EXTHTTP:/i.test(line) || /cookie|authorization/i.test(line)
-      ),
+      headers,
+      description: name,
+      requiresDrm,
+      requiresAuthorization,
     });
     current = null;
   };
@@ -93,7 +142,7 @@ export function parsePlaylist(source: string): LiveChannel[] {
       current = { info: line, extras: [] };
     } else if (current && line.startsWith("#")) {
       current.extras.push(line);
-    } else if (current && /^https?:\/\//i.test(line)) {
+    } else if (current && (line.startsWith("http://") || line.startsWith("https://"))) {
       current.url = line;
       finish();
     }
@@ -115,7 +164,7 @@ export async function loadChannels(ctx: ProviderContext): Promise<LiveChannel[]>
   const source = typeof response.data === "string"
     ? response.data
     : String(response.data ?? "");
-  if (!/^\s*#EXTM3U/m.test(source)) {
+  if (!source.trimStart().startsWith("#EXTM3U")) {
     throw new Error("LiveTGTV did not return a valid M3U playlist");
   }
   return parsePlaylist(source);
@@ -129,7 +178,7 @@ export function channelId(link: string): string {
   try {
     const parsed = new URL(link);
     if (parsed.protocol !== "livetgtv:" || parsed.hostname !== "channel") return "";
-    return decodeURIComponent(parsed.pathname.replace(/^\//, ""));
+    return decodeURIComponent(parsed.pathname.slice(1));
   } catch {
     return "";
   }
