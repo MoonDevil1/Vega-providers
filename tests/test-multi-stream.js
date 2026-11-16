@@ -436,6 +436,45 @@ async function main() {
   assert.ok(!vidoutMasterStreams.some((stream) => stream.link === vidoutMaster),
     "VIDOUT master must be expanded when it contains a thumbnail-only variant");
 
+
+  // HLS master playlists must be expanded so Vega shows every real quality.
+  const qualityEmbed = "https://mirror.example.test/quality";
+  const qualityMaster = "https://cdn.example.test/quality/master.m3u8";
+  const qualityHtml = '<button data-id="quality" data-server-index="0" data-url="' + qualityEmbed +
+    '"><span class="server-name">Quality mirror</span></button>';
+  const qualityContext = {
+    axios: { async get(url) {
+      if (url === episodeUrl) return { data: qualityHtml, status: 200, headers: {} };
+      if (url === qualityEmbed) return {
+        data: '<script>var source="' + qualityMaster + '";</script>', status: 200, headers: {},
+      };
+      if (url === qualityMaster) return {
+        data: "#EXTM3U\n" +
+          "#EXT-X-STREAM-INF:BANDWIDTH=12000000,RESOLUTION=3840x2160\n2160/index.m3u8\n" +
+          "#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080\n1080/index.m3u8\n" +
+          "#EXT-X-STREAM-INF:BANDWIDTH=3000000,RESOLUTION=1280x720\n720/index.m3u8\n" +
+          "#EXT-X-STREAM-INF:BANDWIDTH=1200000,RESOLUTION=854x480\n480/index.m3u8",
+        status: 200, headers: {},
+      };
+      throw new Error("Unexpected quality test URL: " + url);
+    }},
+    cheerio: null,
+  };
+  const qualityStreams = await getStream({
+    link: episodeUrl,
+    type: "tv",
+    signal: new AbortController().signal,
+    providerContext: qualityContext,
+  });
+  assert.deepEqual(qualityStreams.map((stream) => stream.quality), ["2160", "1080", "720", "480"],
+    "all HLS master resolutions must be returned as separately selectable qualities");
+  assert.deepEqual(qualityStreams.map((stream) => stream.link), [
+    "https://cdn.example.test/quality/2160/index.m3u8",
+    "https://cdn.example.test/quality/1080/index.m3u8",
+    "https://cdn.example.test/quality/720/index.m3u8",
+    "https://cdn.example.test/quality/480/index.m3u8",
+  ], "relative HLS variant URLs must resolve against the master playlist");
+
   console.log("MultiMovies playable-media-only regression tests passed");
 }
 
