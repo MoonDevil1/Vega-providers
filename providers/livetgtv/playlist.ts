@@ -24,9 +24,9 @@ function mediaType(rawUrl: string): LiveChannel["type"] | null {
   try {
     const url = new URL(rawUrl);
     const path = (url.pathname + url.search).toLowerCase();
-    if (/\\.m3u8(?:$|[?&])/.test(path) || /[?&](?:type|format)=m3u8(?:&|$)/.test(path)) return "m3u8";
-    if (/\\.mpd(?:$|[?&])/.test(path) || /[?&](?:type|format)=mpd(?:&|$)/.test(path)) return "mpd";
-    if (/\\.(mp4|m4v)(?:$|[?&])/.test(path)) return "mp4";
+    if (/\.m3u8(?:$|[?&])/.test(path) || /[?&](?:type|format)=m3u8(?:&|$)/.test(path)) return "m3u8";
+    if (/\.mpd(?:$|[?&])/.test(path) || /[?&](?:type|format)=mpd(?:&|$)/.test(path)) return "mpd";
+    if (/\.(mp4|m4v)(?:$|[?&])/.test(path)) return "mp4";
   } catch {}
   return null;
 }
@@ -35,7 +35,7 @@ function setHeader(headers: Record<string, string>, name: string, value: string)
   const rawKey = name.trim();
   const key = ({ "user-agent": "User-Agent", referer: "Referer", referrer: "Referer", origin: "Origin", cookie: "Cookie", authorization: "Authorization" } as Record<string, string>)[rawKey.toLowerCase()] || rawKey;
   const content = value.trim();
-  if (!key || !content || key.includes("\\r") || key.includes("\\n") || content.includes("\\r") || content.includes("\\n")) return;
+  if (!key || !content || key.includes("\r") || key.includes("\n") || content.includes("\r") || content.includes("\n")) return;
   const existing = Object.keys(headers).find((item) => item.toLowerCase() === key.toLowerCase());
   headers[existing || key] = content;
 }
@@ -67,7 +67,7 @@ function parseEntryHeaders(extras: string[]): Record<string, string> {
   for (const line of extras) {
     if (/^#EXTHTTP:/i.test(line)) {
       parseHeaderPayload(line.slice(line.indexOf(":") + 1), headers);
-    } else if (/^#KODIPROP:inputstream\\.adaptive\\.stream_headers=/i.test(line)) {
+    } else if (/^#KODIPROP:inputstream\.adaptive\.stream_headers=/i.test(line)) {
       parseHeaderPayload(line.slice(line.indexOf("=") + 1), headers);
     } else if (/^#EXTVLCOPT:http-(?:user-agent|referrer|origin|cookie|authorization)=/i.test(line)) {
       const index = line.indexOf("=");
@@ -115,8 +115,8 @@ export function parsePlaylist(source: string): LiveChannel[] {
   };
 
   // Some playlist generators prepend a UTF-8 BOM, which must not invalidate #EXTM3U.
-  const normalized = String(source || "").replace(/^\\uFEFF/, "");
-  for (const rawLine of normalized.split(/\\r?\\n/)) {
+  const normalized = String(source || "").replace(/^\uFEFF/, "");
+  for (const rawLine of normalized.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line) continue;
     if (/^#EXTINF:/i.test(line)) {
@@ -124,7 +124,7 @@ export function parsePlaylist(source: string): LiveChannel[] {
       current = { info: line, extras: [] };
     } else if (current && line.startsWith("#")) {
       current.extras.push(line);
-    } else if (current && /^https?:\\/\\//i.test(line)) {
+    } else if (current && /^https?:\/\//i.test(line)) {
       current.url = line;
       finish();
     }
@@ -143,7 +143,7 @@ export async function loadChannels(ctx: ProviderContext): Promise<LiveChannel[]>
     timeout: 30000,
     maxRedirects: 5,
   });
-  const source = (typeof response.data === "string" ? response.data : String(response.data ?? "")).replace(/^\\uFEFF/, "");
+  const source = (typeof response.data === "string" ? response.data : String(response.data ?? "")).replace(/^\uFEFF/, "");
   if (!source.trimStart().startsWith("#EXTM3U")) throw new Error("LiveTGTV did not return a valid M3U playlist");
   return parsePlaylist(source);
 }
