@@ -11,3 +11,5 @@ export async function genres({ providerContext }: { providerContext: ProviderCon
     .sort((a, b) => a.localeCompare(b))
     .map((group) => ({ title: group, filter: "group:" + group }));
 }
+
+export { parsePlaylistDocument } from "./playlist";

@@ -3,9 +3,10 @@ const { getPosts, getSearchPosts } = require("../dist/livetgtv/posts");
 const { getMeta } = require("../dist/livetgtv/meta");
 const { getStream } = require("../dist/livetgtv/stream");
 const { genres } = require("../dist/livetgtv/catalog");
+const { parsePlaylistDocument } = require("../dist/livetgtv/catalog");
 
 const fixture = [
-  "\uFEFF#EXTM3U",
+  "\uFEFF#EXTM3U url-tvg=\"https://livetgtv.lovable.app/api/public/tv-eps.xml\"",
   '#EXTINF:-1 tvg-id="free-1" tvg-name="Free News" tvg-logo="https://example.com/news.png" group-title="News",Free News',
   "#EXTVLCOPT:http-user-agent=TestPlayer/1.0",
   "#EXTVLCOPT:http-referrer=https://example.com/",
@@ -27,6 +28,19 @@ const fixture = [
 const providerContext = { axios: { get: async () => ({ data: fixture }) } };
 
 (async () => {
+  const parsed = parsePlaylistDocument(fixture);
+  assert.equal(parsed.epgUrl, "https://livetgtv.lovable.app/api/public/tv-eps.xml");
+
+  const liveSports = parsePlaylistDocument([
+    '#EXTM3U url-tvg="https://example.com/epg.xml"',
+    '#EXTINF:-1 tvg-id="" tvg-name="" group-title="Live Sports",Live Sports Match',
+    "https://livetgtv.lovable.app/api/public/stream?url=https://cablecastx.com/live/index.m3u8&liveid=ls-12t5xnj&embed=1",
+  ].join("\n"));
+  assert.equal(liveSports.channels.length, 1, "nested LiveTGTV HLS URLs should be recognized");
+  assert.equal(liveSports.channels[0].id, "liveid:ls-12t5xnj", "sports live IDs must remain unique without tvg-id");
+  assert.equal(liveSports.channels[0].type, "m3u8");
+  assert.match(liveSports.channels[0].url, /liveid=ls-12t5xnj/);
+
   const groups = await genres({ providerContext });
   assert.deepEqual(groups.map((group) => group.title), ["Entertainment", "News", "Other", "Sports"]);
 

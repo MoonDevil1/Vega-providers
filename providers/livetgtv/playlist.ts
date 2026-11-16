@@ -15,6 +15,11 @@ export interface LiveChannel {
   requiresAuthorization: boolean;
 }
 
+export interface LivePlaylist {
+  channels: LiveChannel[];
+  epgUrl: string;
+}
+
 function attribute(line: string, key: string): string {
   const match = line.match(new RegExp("(?:^|\\s)" + key + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s,]+))", "i"));
   return match ? String(match[1] ?? match[2] ?? match[3] ?? "").trim() : "";
@@ -22,13 +27,26 @@ function attribute(line: string, key: string): string {
 
 function mediaType(rawUrl: string): LiveChannel["type"] | null {
   try {
-    const url = new URL(rawUrl);
-    const path = (url.pathname + url.search).toLowerCase();
-    if (/\.m3u8(?:$|[?&])/.test(path) || /[?&](?:type|format)=m3u8(?:&|$)/.test(path)) return "m3u8";
-    if (/\.mpd(?:$|[?&])/.test(path) || /[?&](?:type|format)=mpd(?:&|$)/.test(path)) return "mpd";
-    if (/\.(mp4|m4v)(?:$|[?&])/.test(path)) return "mp4";
+    const parsed = new URL(rawUrl);
+    // LiveTGTV wraps the actual HLS URL in ?url=...&liveid=...&embed=1.
+    // Inspect both the outer URL and its nested source, including URL-encoded sources.
+    const candidates = [rawUrl, parsed.searchParams.get("url") || ""];
+    for (const candidate of candidates) {
+      const value = candidate.toLowerCase();
+      if (/\.m3u8(?:$|[?#&])/.test(value) || /[?&](?:type|format)=m3u8(?:&|$)/.test(value)) return "m3u8";
+      if (/\.mpd(?:$|[?#&])/.test(value) || /[?&](?:type|format)=mpd(?:&|$)/.test(value)) return "mpd";
+      if (/\.(mp4|m4v)(?:$|[?#&])/.test(value)) return "mp4";
+    }
   } catch {}
   return null;
+}
+
+function channelIdentity(rawUrl: string, tvgId: string, name: string): string {
+  try {
+    const liveId = new URL(rawUrl).searchParams.get("liveid");
+    if (liveId) return "liveid:" + liveId;
+  } catch {}
+  return tvgId ? "tvg:" + tvgId : "name:" + name;
 }
 
 function setHeader(headers: Record<string, string>, name: string, value: string): void {
@@ -79,9 +97,13 @@ function parseEntryHeaders(extras: string[]): Record<string, string> {
   return headers;
 }
 
-export function parsePlaylist(source: string): LiveChannel[] {
+export function parsePlaylistDocument(source: string): LivePlaylist {
   const channels: LiveChannel[] = [];
   let current: { info: string; extras: string[]; url?: string } | null = null;
+  const normalized = String(source || "").replace(/^\uFEFF/, "");
+  const lines = normalized.split(/\r?\n/);
+  const header = lines.find((line) => /^#EXTM3U\b/i.test(line.trim())) || "";
+  const epgUrl = attribute(header, "url-tvg") || attribute(header, "x-tvg-url");
 
   const finish = () => {
     if (!current || !current.url) {
@@ -105,7 +127,7 @@ export function parsePlaylist(source: string): LiveChannel[] {
     const tvgId = attribute(current.info, "tvg-id");
     const group = attribute(current.info, "group-title") || "Other";
     const logo = attribute(current.info, "tvg-logo");
-    const id = (tvgId || name) + "|" + name;
+    const id = channelIdentity(current.url, tvgId, name);
     const requiresDrm = current.extras.some((line) => /^#KODIPROP:.*(?:license_(?:type|key)|drm)/i.test(line));
     const requiresAuthorization = current.extras.some((line) => /cookie|authorization/i.test(line)) ||
       Object.keys(headers).some((key) => /^(cookie|authorization)$/i.test(key));
@@ -114,9 +136,7 @@ export function parsePlaylist(source: string): LiveChannel[] {
     current = null;
   };
 
-  // Some playlist generators prepend a UTF-8 BOM, which must not invalidate #EXTM3U.
-  const normalized = String(source || "").replace(/^\uFEFF/, "");
-  for (const rawLine of normalized.split(/\r?\n/)) {
+  for (const rawLine of lines) {
     const line = rawLine.trim();
     if (!line) continue;
     if (/^#EXTINF:/i.test(line)) {
@@ -130,10 +150,14 @@ export function parsePlaylist(source: string): LiveChannel[] {
     }
   }
   finish();
-  return channels;
+  return { channels, epgUrl };
 }
 
-export async function loadChannels(ctx: ProviderContext): Promise<LiveChannel[]> {
+export function parsePlaylist(source: string): LiveChannel[] {
+  return parsePlaylistDocument(source).channels;
+}
+
+export async function loadPlaylist(ctx: ProviderContext): Promise<LivePlaylist> {
   const response = await ctx.axios.get(PLAYLIST_URL, {
     headers: {
       Accept: "audio/x-mpegurl, application/x-mpegURL, text/plain, */*",
@@ -145,7 +169,13 @@ export async function loadChannels(ctx: ProviderContext): Promise<LiveChannel[]>
   });
   const source = (typeof response.data === "string" ? response.data : String(response.data ?? "")).replace(/^\uFEFF/, "");
   if (!source.trimStart().startsWith("#EXTM3U")) throw new Error("LiveTGTV did not return a valid M3U playlist");
-  return parsePlaylist(source);
+  const playlist = parsePlaylistDocument(source);
+  if (!playlist.channels.length) throw new Error("LiveTGTV playlist contains no supported channel streams");
+  return playlist;
+}
+
+export async function loadChannels(ctx: ProviderContext): Promise<LiveChannel[]> {
+  return (await loadPlaylist(ctx)).channels;
 }
 
 export function channelLink(id: string): string {
