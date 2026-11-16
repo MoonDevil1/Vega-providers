@@ -32,6 +32,14 @@ jobs:
         run: npm ci
       - name: Build provider bundles
         run: npm run build
+      - name: Verify LiveTGTV bundles
+        run: |
+          test -s dist/livetgtv/catalog.js
+          test -s dist/livetgtv/posts.js
+          test -s dist/livetgtv/meta.js
+          test -s dist/livetgtv/stream.js
+      - name: Test LiveTGTV M3U playlist integration
+        run: node tests/test-livetgtv.js
       - name: Test MultiMovies episode extraction
         run: node tests/test-multi.js
       - name: Test MultiMovies episode stream extraction
@@ -40,7 +48,7 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+MoonDevil1@users.noreply.github.com"
           git add dist
           if git diff --cached --quiet; then
             echo "Generated bundles are already up to date."
