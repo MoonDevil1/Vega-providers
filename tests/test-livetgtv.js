@@ -5,7 +5,7 @@ const { getStream } = require("../dist/livetgtv/stream");
 const { genres } = require("../dist/livetgtv/catalog");
 
 const fixture = [
-  "\\uFEFF#EXTM3U",
+  "\uFEFF#EXTM3U",
   '#EXTINF:-1 tvg-id="free-1" tvg-name="Free News" tvg-logo="https://example.com/news.png" group-title="News",Free News',
   "#EXTVLCOPT:http-user-agent=TestPlayer/1.0",
   "#EXTVLCOPT:http-referrer=https://example.com/",
@@ -22,7 +22,7 @@ const fixture = [
   '#EXTINF:-1 tvg-id="auth-missing" tvg-name="Missing Auth" group-title="Other",Missing Auth',
   "#EXTVLCOPT:http-cookie=",
   "https://example.com/missing-auth.m3u8",
-].join("\\n");
+].join("\n");
 
 const providerContext = { axios: { get: async () => ({ data: fixture }) } };
 
