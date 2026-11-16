@@ -36,18 +36,6 @@ export interface SkipInterval {
 export interface StreamDrm {
   type: "widevine" | "playready" | "clearkey" | "fairplay";
   licenseServer?: string;
-  headers?: Record<string, string>;
-  clearKeys?: Record<string, string>;
-  multiDrm?: boolean;
-  contentId?: string;
-  certificateUrl?: string;
-  base64Certificate?: boolean;
-}
-
-/** JSON-serializable DRM configuration supported by current Vega mobile builds. */
-export interface StreamDrm {
-  type: "widevine" | "playready" | "clearkey" | "fairplay";
-  licenseServer?: string;
   /** License request headers, separate from media request headers. */
   headers?: Record<string, string>;
   /** ClearKey key IDs mapped to keys, both 32-character hexadecimal strings. */
