@@ -421,6 +421,66 @@ function directMediaStream(url: string, server: string): Stream[] {
   return mediaType ? [{ server, link: url, type: mediaType }] : [];
 }
 
+
+/* Expand HLS master playlists into one Vega source per real resolution.
+ * Keep the original source when the URL is a media playlist or cannot be read. */
+async function expandHlsQualities(
+  stream: StreamEx,
+  signal: AbortSignal,
+  ctx: ProviderContext,
+): Promise<StreamEx[]> {
+  if (!stream.link || !/\.m3u8(?:[?#]|$)/i.test(stream.link)) return [stream];
+  try {
+    const response = await ctx.axios.get(stream.link, {
+      headers: { ...BASE_HEADERS, ...(stream.headers || {}) },
+      signal,
+      timeout: 8000,
+    });
+    const body = String(response.data || "");
+    if (!/^\s*#EXTM3U/m.test(body) || !/#EXT-X-STREAM-INF:/i.test(body)) return [stream];
+
+    const variants: StreamEx[] = [];
+    const lines = body.split(/\r?\n/);
+    let attributes = "";
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line) continue;
+      if (/^#EXT-X-STREAM-INF:/i.test(line)) {
+        attributes = line;
+        continue;
+      }
+      if (!attributes || line.startsWith("#")) continue;
+      const info = attributes;
+      attributes = "";
+      let variantUrl = "";
+      try { variantUrl = new URL(line, stream.link).toString(); } catch { continue; }
+      const resolution = info.match(/RESOLUTION=\d+x(\d+)/i);
+      const name = info.match(/(?:^|,)NAME="([^"]+)"/i)?.[1] || "";
+      const height = resolution ? Number(resolution[1]) : Number((name.match(/(2160|1440|1080|720|576|540|480|360)/) || [])[1] || 0);
+      const quality = height ? String(height) : "";
+      if (!quality || variants.some((item) => item.link === variantUrl)) continue;
+      const qualityLabel = quality + "p";
+      const sourceDetails = String(stream.quality || "").trim();
+      const qualityValue = sourceDetails && !new RegExp("\\b" + quality + "p?\\b", "i").test(sourceDetails)
+        ? sourceDetails + " · " + qualityLabel
+        : qualityLabel;
+      variants.push({
+        ...stream,
+        // Keep the server name stable; Vega displays the separate quality field
+        // as the selectable rendition label, matching AnimeWorld's contract.
+        server: stream.server,
+        link: variantUrl,
+        type: "m3u8",
+        quality: qualityValue,
+      });
+    }
+    return variants.length ? variants : [stream];
+  } catch (error: any) {
+    console.warn("[stream] HLS quality expansion skipped:", error?.message || error);
+    return [stream];
+  }
+}
+
 async function routeServer(
   url: string,
   mediaType: MediaType,
@@ -845,7 +905,10 @@ export async function getStream({
       if (ex.headers) merged.headers = ex.headers;
       if (ex.quality) merged.quality = ex.quality;
       if (ex.subtitles) merged.subtitles = ex.subtitles;
-      streamLinks.push(merged);
+      const expanded = await expandHlsQualities(merged, signal, providerContext);
+      for (const variant of expanded) {
+        if (!streamLinks.some((item) => item.link === variant.link)) streamLinks.push(variant);
+      }
     }
   }
 
