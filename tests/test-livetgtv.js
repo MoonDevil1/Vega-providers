@@ -2,8 +2,7 @@ const assert = require("node:assert/strict");
 const { getPosts, getSearchPosts } = require("../dist/livetgtv/posts");
 const { getMeta } = require("../dist/livetgtv/meta");
 const { getStream } = require("../dist/livetgtv/stream");
-const { genres } = require("../dist/livetgtv/catalog");
-const { parsePlaylistDocument } = require("../dist/livetgtv/catalog");
+const { genres, parsePlaylistDocument } = require("../dist/livetgtv/catalog");
 
 const fixture = [
   "\uFEFF#EXTM3U url-tvg=\"https://livetgtv.lovable.app/api/public/tv-eps.xml\"",
@@ -25,7 +24,31 @@ const fixture = [
   "https://example.com/missing-auth.m3u8",
 ].join("\n");
 
-const providerContext = { axios: { get: async () => ({ data: fixture }) } };
+const calls = [];
+const providerContext = {
+  axios: {
+    get: async (url) => {
+      calls.push(url);
+      if (url === "https://livetgtv.lovable.app/api/public/playlist.m3u") {
+        return { data: fixture };
+      }
+      if (url === "https://livetgtv.lovable.app/api/public/channels/drm-1") {
+        return {
+          data: {
+            id: "drm-1",
+            sources: ["https://cdn.example.com/protected/index.mpd?token=fresh"],
+            drm: {
+              type: "clearkey",
+              keyId: "EB19113C11CE5CFB80C89696765A0187",
+              key: "B2797CE5E403EE22D8E36C6D5F2B6630",
+            },
+          },
+        };
+      }
+      throw new Error("No fixture for " + url);
+    },
+  },
+};
 
 (async () => {
   const parsed = parsePlaylistDocument(fixture);
@@ -65,7 +88,16 @@ const providerContext = { axios: { get: async () => ({ data: fixture }) } };
   assert.equal(search[0].tag, "Entertainment", "single-quoted M3U attributes should be parsed");
 
   const protectedStreams = await getStream({ link: all[2].link, type: "movie", providerContext });
-  assert.equal(protectedStreams.length, 0, "DRM streams remain blocked until Vega exposes a DRM license contract");
+  assert.equal(protectedStreams.length, 1, "ClearKey streams should now be returned to Vega");
+  assert.equal(protectedStreams[0].link, "https://cdn.example.com/protected/index.mpd?token=fresh");
+  assert.equal(protectedStreams[0].type, "mpd");
+  assert.deepEqual(protectedStreams[0].drm, {
+    type: "clearkey",
+    clearKeys: {
+      eb19113c11ce5cfb80c89696765a0187: "b2797ce5e403ee22d8e36c6d5f2b6630",
+    },
+  });
+  assert.ok(calls.includes("https://livetgtv.lovable.app/api/public/channels/drm-1"));
 
   const missingAuth = await getStream({ link: all[4].link, type: "movie", providerContext });
   assert.equal(missingAuth.length, 0, "auth-required streams without credentials must not be returned");
@@ -86,7 +118,7 @@ const providerContext = { axios: { get: async () => ({ data: fixture }) } };
   assert.equal(cookieStreams[0].headers.Cookie, "private-session");
   assert.equal(cookieStreams[0].headers.Referer, "https://example.com/watch");
 
-  console.log("LiveTGTV M3U regression tests passed.");
+  console.log("LiveTGTV playlist and DRM playback regression tests passed.");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;
