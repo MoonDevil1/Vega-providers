@@ -466,8 +466,10 @@ async function main() {
     signal: new AbortController().signal,
     providerContext: qualityContext,
   });
-  assert.deepEqual(qualityStreams.map((stream) => stream.quality), ["2160", "1080", "720", "480"],
-    "all HLS master resolutions must be returned as separately selectable qualities");
+  assert.deepEqual(qualityStreams.map((stream) => stream.quality), ["2160p", "1080p", "720p", "480p"],
+    "all HLS master resolutions must be exposed through Vega quality labels like AnimeWorld");
+  assert.ok(qualityStreams.every((stream) => stream.server === "Quality mirror / Resolved media"),
+    "resolution labels belong in Stream.quality, not appended to the server name");
   assert.deepEqual(qualityStreams.map((stream) => stream.link), [
     "https://cdn.example.test/quality/2160/index.m3u8",
     "https://cdn.example.test/quality/1080/index.m3u8",
