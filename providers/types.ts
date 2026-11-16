@@ -32,6 +32,20 @@ export interface SkipInterval {
   to: number;
 }
 
+/** JSON-serializable DRM configuration supported by current Vega mobile builds. */
+export interface StreamDrm {
+  type: "widevine" | "playready" | "clearkey" | "fairplay";
+  licenseServer?: string;
+  /** License request headers, separate from media request headers. */
+  headers?: Record<string, string>;
+  /** ClearKey key IDs mapped to keys, both 32-character hexadecimal strings. */
+  clearKeys?: Record<string, string>;
+  multiDrm?: boolean;
+  contentId?: string;
+  certificateUrl?: string;
+  base64Certificate?: boolean;
+}
+
 // getStream
 export interface Stream {
   server: string;
@@ -42,6 +56,7 @@ export interface Stream {
   tags?: string[];
   subtitles?: TextTracks;
   headers?: any;
+  drm?: StreamDrm;
   skip?: SkipInterval[];
 }
 
@@ -159,38 +174,22 @@ export interface ProviderType {
 }
 
 // Options to customize the WAF-solving WebView dialog.
-// Options to customize the WAF-solving WebView dialog.
 export interface OpenWebViewOptions {
-  // Title shown in the dialog header.
   title?: string;
-  // Helper text shown under the title.
   description?: string;
-
   headers?: Record<string, string>;
-
   waitForCookie?: string;
-
   force?: boolean;
-  // If set, the dialog auto-cancels (rejects) after this many milliseconds.
   timeoutMs?: number;
-
-  // Custom JavaScript injected into the WebView. Can communicate back via:
-  // window.ReactNativeWebView.postMessage(JSON.stringify({ __waf: true, data: ... }))
   injectedJavaScript?: string;
 }
 
 // Result returned to the provider after the user solves the challenge.
 export interface OpenWebViewResult {
-  // The page response after the challenge is solved: the rendered HTML of the
-  // document (document.documentElement.outerHTML).
   data: string;
-  // Cookie header value, e.g. "cf_clearance=abc; other=def".
   cookies: string;
-  // Cookies as a name -> value map.
   cookieMap: Record<string, string>;
-  // The User-Agent used by the WebView.
   userAgent: string;
-  // The URL that was opened.
   url: string;
 }
 

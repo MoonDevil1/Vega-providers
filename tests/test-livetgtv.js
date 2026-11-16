@@ -2,8 +2,7 @@ const assert = require("node:assert/strict");
 const { getPosts, getSearchPosts } = require("../dist/livetgtv/posts");
 const { getMeta } = require("../dist/livetgtv/meta");
 const { getStream } = require("../dist/livetgtv/stream");
-const { genres } = require("../dist/livetgtv/catalog");
-const { parsePlaylistDocument } = require("../dist/livetgtv/catalog");
+const { genres, parsePlaylistDocument } = require("../dist/livetgtv/catalog");
 
 const fixture = [
   "\uFEFF#EXTM3U url-tvg=\"https://livetgtv.lovable.app/api/public/tv-eps.xml\"",
@@ -16,7 +15,10 @@ const fixture = [
   '#EXTINF:-1 tvg-id="drm-1" tvg-name="Protected Channel" group-title="Sports",Protected Channel',
   "#KODIPROP:inputstream.adaptive.license_type=clearkey",
   "#KODIPROP:inputstream.adaptive.license_key=must-not-be-used",
-  "https://example.com/protected.mpd",
+  "https://livetgtv.lovable.app/api/public/stream?url=https://example.com/protected.mpd&liveid=drm-1&embed=1",
+  '#EXTINF:-1 tvg-id="" tvg-name="Multi-key Channel" group-title="Sports",Multi-key Channel',
+  "#KODIPROP:inputstream.adaptive.license_type=clearkey",
+  "https://livetgtv.lovable.app/api/public/stream?url=https://example.com/multi.mpd&liveid=drm-multi&embed=1",
   '#EXTINF:-1 tvg-id="cookie-1" tvg-name="Cookie Channel" group-title="News",Cookie Channel',
   '#EXTHTTP:{"cookie":"private-session","Referer":"https://example.com/watch"}',
   "https://example.com/cookie.m3u8",
@@ -25,7 +27,46 @@ const fixture = [
   "https://example.com/missing-auth.m3u8",
 ].join("\n");
 
-const providerContext = { axios: { get: async () => ({ data: fixture }) } };
+const calls = [];
+const providerContext = {
+  axios: {
+    get: async (url) => {
+      calls.push(url);
+      if (url === "https://livetgtv.lovable.app/api/public/playlist.m3u") {
+        return { data: fixture };
+      }
+      if (url === "https://livetgtv.lovable.app/api/public/channels/drm-multi") {
+        return {
+          data: {
+            id: "drm-multi",
+            sources: ["https://cdn.example.com/multi/index.mpd?token=fresh"],
+            drm: {
+              type: "clearkey",
+              clearKeys: {
+                "00112233445566778899aabbccddeeff": "ffeeddccbbaa99887766554433221100",
+                "11223344556677889900aabbccddeeff": "0011aabbccddeeff0011aabbccddeeff",
+              },
+            },
+          },
+        };
+      }
+      if (url === "https://livetgtv.lovable.app/api/public/channels/drm-1") {
+        return {
+          data: {
+            id: "drm-1",
+            sources: ["https://cdn.example.com/protected/index.mpd?token=fresh"],
+            drm: {
+              type: "clearkey",
+              keyId: "EB19113C11CE5CFB80C89696765A0187",
+              key: "B2797CE5E403EE22D8E36C6D5F2B6630",
+            },
+          },
+        };
+      }
+      throw new Error("No fixture for " + url);
+    },
+  },
+};
 
 (async () => {
   const parsed = parsePlaylistDocument(fixture);
@@ -45,14 +86,14 @@ const providerContext = { axios: { get: async () => ({ data: fixture }) } };
   assert.deepEqual(groups.map((group) => group.title), ["Entertainment", "News", "Other", "Sports"]);
 
   const all = await getPosts({ filter: "all", page: 1, providerContext });
-  assert.equal(all.length, 5, "all supported playlist channels should be listed");
+  assert.equal(all.length, 6, "all supported playlist channels should be listed");
   assert.equal(all[0].title, "Free News");
   assert.equal(all[0].tag, "News");
   assert.equal(all[0].image, "https://example.com/news.png");
   assert.equal(all[2].title, "Protected Channel");
   assert.equal(all[2].cornerTag, "DRM");
-  assert.equal(all[3].title, "Cookie Channel");
-  assert.equal(all[3].cornerTag, "Login");
+  assert.equal(all[4].title, "Cookie Channel");
+  assert.equal(all[4].cornerTag, "Login");
 
   const news = await getPosts({ filter: "group:News", page: 1, providerContext });
   assert.equal(news.length, 2);
@@ -65,9 +106,25 @@ const providerContext = { axios: { get: async () => ({ data: fixture }) } };
   assert.equal(search[0].tag, "Entertainment", "single-quoted M3U attributes should be parsed");
 
   const protectedStreams = await getStream({ link: all[2].link, type: "movie", providerContext });
-  assert.equal(protectedStreams.length, 0, "DRM streams remain blocked until Vega exposes a DRM license contract");
+  assert.equal(protectedStreams.length, 1, "ClearKey streams should now be returned to Vega");
+  assert.equal(protectedStreams[0].link, "https://cdn.example.com/protected/index.mpd?token=fresh");
+  assert.equal(protectedStreams[0].type, "mpd");
+  assert.deepEqual(protectedStreams[0].drm, {
+    type: "clearkey",
+    clearKeys: {
+      eb19113c11ce5cfb80c89696765a0187: "b2797ce5e403ee22d8e36c6d5f2b6630",
+    },
+  });
+  assert.ok(calls.includes("https://livetgtv.lovable.app/api/public/channels/drm-1"));
 
-  const missingAuth = await getStream({ link: all[4].link, type: "movie", providerContext });
+  const multiKeyStreams = await getStream({ link: all[3].link, type: "movie", providerContext });
+  assert.equal(multiKeyStreams.length, 1, "multi-key ClearKey channels should be returned");
+  assert.deepEqual(multiKeyStreams[0].drm.clearKeys, {
+    "00112233445566778899aabbccddeeff": "ffeeddccbbaa99887766554433221100",
+    "11223344556677889900aabbccddeeff": "0011aabbccddeeff0011aabbccddeeff",
+  });
+
+  const missingAuth = await getStream({ link: all[5].link, type: "movie", providerContext });
   assert.equal(missingAuth.length, 0, "auth-required streams without credentials must not be returned");
 
   const meta = await getMeta({ link: all[0].link, providerContext });
@@ -81,12 +138,12 @@ const providerContext = { axios: { get: async () => ({ data: fixture }) } };
   assert.equal(streams[0].headers["User-Agent"], "TestPlayer/1.0");
   assert.equal(streams[0].headers.Referer, "https://example.com/");
 
-  const cookieStreams = await getStream({ link: all[3].link, type: "movie", providerContext });
+  const cookieStreams = await getStream({ link: all[4].link, type: "movie", providerContext });
   assert.equal(cookieStreams.length, 1, "playlist-provided cookie credentials should be passed to playback");
   assert.equal(cookieStreams[0].headers.Cookie, "private-session");
   assert.equal(cookieStreams[0].headers.Referer, "https://example.com/watch");
 
-  console.log("LiveTGTV M3U regression tests passed.");
+  console.log("LiveTGTV playlist and DRM playback regression tests passed.");
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;
