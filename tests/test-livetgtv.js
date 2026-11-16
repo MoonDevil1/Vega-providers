@@ -92,8 +92,8 @@ const providerContext = {
   assert.equal(all[0].image, "https://example.com/news.png");
   assert.equal(all[2].title, "Protected Channel");
   assert.equal(all[2].cornerTag, "DRM");
-  assert.equal(all[3].title, "Cookie Channel");
-  assert.equal(all[3].cornerTag, "Login");
+  assert.equal(all[4].title, "Cookie Channel");
+  assert.equal(all[4].cornerTag, "Login");
 
   const news = await getPosts({ filter: "group:News", page: 1, providerContext });
   assert.equal(news.length, 2);
