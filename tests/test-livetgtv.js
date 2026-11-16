@@ -3,7 +3,7 @@ const { getPosts, getSearchPosts } = require("../dist/livetgtv/posts");
 const { getMeta } = require("../dist/livetgtv/meta");
 const { getStream } = require("../dist/livetgtv/stream");
 const { genres } = require("../dist/livetgtv/catalog");
-const { parsePlaylistDocument } = require("../dist/livetgtv/playlist");
+const { parsePlaylistDocument } = require("../dist/livetgtv/catalog");
 
 const fixture = [
   "\uFEFF#EXTM3U url-tvg=\"https://livetgtv.lovable.app/api/public/tv-eps.xml\"",
