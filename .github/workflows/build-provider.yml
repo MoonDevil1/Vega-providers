@@ -32,6 +32,14 @@ jobs:
         run: npm ci
       - name: Build provider bundles
         run: npm run build
+      - name: Verify LiveTGTV bundles
+        run: |
+          test -s dist/livetgtv/catalog.js
+          test -s dist/livetgtv/posts.js
+          test -s dist/livetgtv/meta.js
+          test -s dist/livetgtv/stream.js
+      - name: Test LiveTGTV M3U playlist integration
+        run: node tests/test-livetgtv.js
       - name: Test MultiMovies episode extraction
         run: node tests/test-multi.js
       - name: Test MultiMovies episode stream extraction

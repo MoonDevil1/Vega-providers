@@ -16,8 +16,8 @@ export interface LiveChannel {
 }
 
 function attribute(line: string, key: string): string {
-  const match = line.match(new RegExp("(?:^|\\s)" + key + '="([^"]*)"', "i"));
-  return match ? match[1].trim() : "";
+  const match = line.match(new RegExp("(?:^|\\s)" + key + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s,]+))", "i"));
+  return match ? String(match[1] ?? match[2] ?? match[3] ?? "").trim() : "";
 }
 
 function mediaType(rawUrl: string): LiveChannel["type"] | null {
@@ -45,9 +45,7 @@ function parseHeaderPayload(raw: string, headers: Record<string, string>): void 
   if (!value) return;
   try {
     const parsed = JSON.parse(value);
-    const source = parsed && typeof parsed === "object" && parsed.headers && typeof parsed.headers === "object"
-      ? parsed.headers
-      : parsed;
+    const source = parsed && typeof parsed === "object" && parsed.headers && typeof parsed.headers === "object" ? parsed.headers : parsed;
     if (source && typeof source === "object" && !Array.isArray(source)) {
       for (const [key, item] of Object.entries(source)) {
         if (typeof item === "string" || typeof item === "number") setHeader(headers, key, String(item));
@@ -74,10 +72,7 @@ function parseEntryHeaders(extras: string[]): Record<string, string> {
     } else if (/^#EXTVLCOPT:http-(?:user-agent|referrer|origin|cookie|authorization)=/i.test(line)) {
       const index = line.indexOf("=");
       const option = line.slice(0, index).toLowerCase();
-      const name = option.endsWith("user-agent") ? "User-Agent"
-        : option.endsWith("referrer") ? "Referer"
-        : option.endsWith("origin") ? "Origin"
-        : option.endsWith("cookie") ? "Cookie" : "Authorization";
+      const name = option.endsWith("user-agent") ? "User-Agent" : option.endsWith("referrer") ? "Referer" : option.endsWith("origin") ? "Origin" : option.endsWith("cookie") ? "Cookie" : "Authorization";
       setHeader(headers, name, line.slice(index + 1));
     }
   }
@@ -98,7 +93,6 @@ export function parsePlaylist(source: string): LiveChannel[] {
       current = null;
       return;
     }
-
     const comma = current.info.indexOf(",");
     const displayTitle = comma >= 0 ? current.info.slice(comma + 1).trim() : "";
     const name = attribute(current.info, "tvg-name") || displayTitle;
@@ -112,29 +106,17 @@ export function parsePlaylist(source: string): LiveChannel[] {
     const group = attribute(current.info, "group-title") || "Other";
     const logo = attribute(current.info, "tvg-logo");
     const id = (tvgId || name) + "|" + name;
-    const requiresDrm = current.extras.some((line) =>
-      /^#KODIPROP:.*(?:license_(?:type|key)|drm)/i.test(line)
-    );
-    const requiresAuthorization = current.extras.some((line) =>
-      /cookie|authorization/i.test(line)
-    ) || Object.keys(headers).some((key) => /^(cookie|authorization)$/i.test(key));
+    const requiresDrm = current.extras.some((line) => /^#KODIPROP:.*(?:license_(?:type|key)|drm)/i.test(line));
+    const requiresAuthorization = current.extras.some((line) => /cookie|authorization/i.test(line)) ||
+      Object.keys(headers).some((key) => /^(cookie|authorization)$/i.test(key));
 
-    channels.push({
-      id,
-      name,
-      logo,
-      group,
-      url: current.url,
-      type,
-      headers,
-      description: name,
-      requiresDrm,
-      requiresAuthorization,
-    });
+    channels.push({ id, name, logo, group, url: current.url, type, headers, description: name, requiresDrm, requiresAuthorization });
     current = null;
   };
 
-  for (const rawLine of String(source || "").split(/\r?\n/)) {
+  // Some playlist generators prepend a UTF-8 BOM, which must not invalidate #EXTM3U.
+  const normalized = String(source || "").replace(/^\uFEFF/, "");
+  for (const rawLine of normalized.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line) continue;
     if (/^#EXTINF:/i.test(line)) {
@@ -142,7 +124,7 @@ export function parsePlaylist(source: string): LiveChannel[] {
       current = { info: line, extras: [] };
     } else if (current && line.startsWith("#")) {
       current.extras.push(line);
-    } else if (current && (line.startsWith("http://") || line.startsWith("https://"))) {
+    } else if (current && /^https?:\/\//i.test(line)) {
       current.url = line;
       finish();
     }
@@ -161,12 +143,8 @@ export async function loadChannels(ctx: ProviderContext): Promise<LiveChannel[]>
     timeout: 30000,
     maxRedirects: 5,
   });
-  const source = typeof response.data === "string"
-    ? response.data
-    : String(response.data ?? "");
-  if (!source.trimStart().startsWith("#EXTM3U")) {
-    throw new Error("LiveTGTV did not return a valid M3U playlist");
-  }
+  const source = (typeof response.data === "string" ? response.data : String(response.data ?? "")).replace(/^\uFEFF/, "");
+  if (!source.trimStart().startsWith("#EXTM3U")) throw new Error("LiveTGTV did not return a valid M3U playlist");
   return parsePlaylist(source);
 }
 
