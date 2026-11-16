@@ -15,7 +15,10 @@ const fixture = [
   '#EXTINF:-1 tvg-id="drm-1" tvg-name="Protected Channel" group-title="Sports",Protected Channel',
   "#KODIPROP:inputstream.adaptive.license_type=clearkey",
   "#KODIPROP:inputstream.adaptive.license_key=must-not-be-used",
-  "https://example.com/protected.mpd",
+  "https://livetgtv.lovable.app/api/public/stream?url=https://example.com/protected.mpd&liveid=drm-1&embed=1",
+  '#EXTINF:-1 tvg-id="" tvg-name="Multi-key Channel" group-title="Sports",Multi-key Channel',
+  "#KODIPROP:inputstream.adaptive.license_type=clearkey",
+  "https://livetgtv.lovable.app/api/public/stream?url=https://example.com/multi.mpd&liveid=drm-multi&embed=1",
   '#EXTINF:-1 tvg-id="cookie-1" tvg-name="Cookie Channel" group-title="News",Cookie Channel',
   '#EXTHTTP:{"cookie":"private-session","Referer":"https://example.com/watch"}',
   "https://example.com/cookie.m3u8",
@@ -31,6 +34,21 @@ const providerContext = {
       calls.push(url);
       if (url === "https://livetgtv.lovable.app/api/public/playlist.m3u") {
         return { data: fixture };
+      }
+      if (url === "https://livetgtv.lovable.app/api/public/channels/drm-multi") {
+        return {
+          data: {
+            id: "drm-multi",
+            sources: ["https://cdn.example.com/multi/index.mpd?token=fresh"],
+            drm: {
+              type: "clearkey",
+              clearKeys: {
+                "00112233445566778899aabbccddeeff": "ffeeddccbbaa99887766554433221100",
+                "11223344556677889900aabbccddeeff": "0011aabbccddeeff0011aabbccddeeff",
+              },
+            },
+          },
+        };
       }
       if (url === "https://livetgtv.lovable.app/api/public/channels/drm-1") {
         return {
@@ -68,7 +86,7 @@ const providerContext = {
   assert.deepEqual(groups.map((group) => group.title), ["Entertainment", "News", "Other", "Sports"]);
 
   const all = await getPosts({ filter: "all", page: 1, providerContext });
-  assert.equal(all.length, 5, "all supported playlist channels should be listed");
+  assert.equal(all.length, 6, "all supported playlist channels should be listed");
   assert.equal(all[0].title, "Free News");
   assert.equal(all[0].tag, "News");
   assert.equal(all[0].image, "https://example.com/news.png");
@@ -99,7 +117,14 @@ const providerContext = {
   });
   assert.ok(calls.includes("https://livetgtv.lovable.app/api/public/channels/drm-1"));
 
-  const missingAuth = await getStream({ link: all[4].link, type: "movie", providerContext });
+  const multiKeyStreams = await getStream({ link: all[3].link, type: "movie", providerContext });
+  assert.equal(multiKeyStreams.length, 1, "multi-key ClearKey channels should be returned");
+  assert.deepEqual(multiKeyStreams[0].drm.clearKeys, {
+    "00112233445566778899aabbccddeeff": "ffeeddccbbaa99887766554433221100",
+    "11223344556677889900aabbccddeeff": "0011aabbccddeeff0011aabbccddeeff",
+  });
+
+  const missingAuth = await getStream({ link: all[5].link, type: "movie", providerContext });
   assert.equal(missingAuth.length, 0, "auth-required streams without credentials must not be returned");
 
   const meta = await getMeta({ link: all[0].link, providerContext });
@@ -113,7 +138,7 @@ const providerContext = {
   assert.equal(streams[0].headers["User-Agent"], "TestPlayer/1.0");
   assert.equal(streams[0].headers.Referer, "https://example.com/");
 
-  const cookieStreams = await getStream({ link: all[3].link, type: "movie", providerContext });
+  const cookieStreams = await getStream({ link: all[4].link, type: "movie", providerContext });
   assert.equal(cookieStreams.length, 1, "playlist-provided cookie credentials should be passed to playback");
   assert.equal(cookieStreams[0].headers.Cookie, "private-session");
   assert.equal(cookieStreams[0].headers.Referer, "https://example.com/watch");
