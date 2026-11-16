@@ -459,12 +459,19 @@ async function expandHlsQualities(
       const height = resolution ? Number(resolution[1]) : Number((name.match(/(2160|1440|1080|720|576|540|480|360)/) || [])[1] || 0);
       const quality = height ? String(height) : "";
       if (!quality || variants.some((item) => item.link === variantUrl)) continue;
+      const qualityLabel = quality + "p";
+      const sourceDetails = String(stream.quality || "").trim();
+      const qualityValue = sourceDetails && !new RegExp("\\b" + quality + "p?\\b", "i").test(sourceDetails)
+        ? sourceDetails + " · " + qualityLabel
+        : qualityLabel;
       variants.push({
         ...stream,
-        server: stream.server.replace(/\s+\d{3,4}p?\b/i, "") + " " + quality + "p",
+        // Keep the server name stable; Vega displays the separate quality field
+        // as the selectable rendition label, matching AnimeWorld's contract.
+        server: stream.server,
         link: variantUrl,
         type: "m3u8",
-        quality,
+        quality: qualityValue,
       });
     }
     return variants.length ? variants : [stream];
