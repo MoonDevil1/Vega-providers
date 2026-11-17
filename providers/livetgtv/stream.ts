@@ -132,19 +132,29 @@ export async function getStream({
       ).map((source) => source.trim())
     : [];
   const sources = apiSources.length ? apiSources : (!channel.requiresDrm ? [channel.url] : []);
-  if (!sources.length) return [];
+  if (!sources.length && !channel.fallback) return [];
 
   const headers = {
     ...channel.headers,
     ...(details?.headers && typeof details.headers === "object" ? details.headers : {}),
   };
 
-  return sources.map((source, index) => ({
-    server: sources.length > 1 ? `LiveTGTV ${index + 1}` : "LiveTGTV",
+  const primaryStreams = sources.map((source, index) => ({
+    server: sources.length > 1 ? `LiveTGTV ${index + 1}` : "LiveTGTV (Primary)",
     link: source,
     type: streamType(source, channel.type),
-    quality: "Auto",
+    quality: "Auto" as const,
     ...(Object.keys(headers).length ? { headers } : {}),
     ...(drm ? { drm } : {}),
   }));
+  if (channel.fallback) {
+    primaryStreams.push({
+      server: "LiveTGTV (Backup)",
+      link: channel.fallback.url,
+      type: streamType(channel.fallback.url, channel.fallback.type),
+      quality: "Auto",
+      ...(Object.keys(channel.fallback.headers).length ? { headers: channel.fallback.headers } : {}),
+    });
+  }
+  return primaryStreams;
 }
