@@ -371,8 +371,8 @@ async function resolveModernMirror(server: ServerItem, axios: any, headers: Reco
       });
       const body = typeof response.data === "string" ? response.data : JSON.stringify(response.data || {});
       const decodedBody = unpackPackedScripts(body);
-      const media = extractDirectMedia(body, pageUrl);
-      for (const item of extractDirectMedia(decodedBody, pageUrl)) {
+      const media = extractDirectMedia(decodedBody, pageUrl);
+      for (const item of extractDirectMedia(body, pageUrl)) {
         if (!media.some((existing) => existing.url === item.url)) media.push(item);
       }
       const proxyMedia = extractM3u8(body, pageUrl) || extractM3u8(decodedBody, pageUrl);
