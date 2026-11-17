@@ -243,25 +243,115 @@ function parseModernServers(html: string, cheerio: any): ServerItem[] {
   }
   return out;
 }
+function readPackedJsString(source: string, start: number): { value: string; next: number } | null {
+  const quote = source[start];
+  if (quote !== "'" && quote !== '"') return null;
+  let value = "";
+  for (let i = start + 1; i < source.length; i++) {
+    const ch = source[i];
+    if (ch === quote) return { value, next: i + 1 };
+    if (ch !== "\\") { value += ch; continue; }
+    const next = source[++i];
+    if (next === "n") value += "\n";
+    else if (next === "r") value += "\r";
+    else if (next === "t") value += "\t";
+    else if (next === "b") value += "\b";
+    else if (next === "f") value += "\f";
+    else if (next === "v") value += "\v";
+    else if (next === "x") {
+      const code = parseInt(source.slice(i + 1, i + 3), 16);
+      if (Number.isFinite(code)) value += String.fromCharCode(code);
+      i += 2;
+    } else if (next === "u") {
+      const code = parseInt(source.slice(i + 1, i + 5), 16);
+      if (Number.isFinite(code)) value += String.fromCharCode(code);
+      i += 4;
+    } else if (next !== undefined) value += next;
+  }
+  return null;
+}
+
+/* StreamHG wraps its JWPlayer configuration in Dean Edwards' packer. Decode
+ * that data-only wrapper so native clients can receive real HLS variants. */
+function unpackPackedScripts(source: string): string {
+  const marker = /eval\s*\(\s*function\s*\(\s*p\s*,\s*a\s*,\s*c\s*,\s*k\s*,\s*e\s*,\s*d\s*\)\s*\{[\s\S]*?\}\s*\(/g;
+  let output = "";
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  while ((match = marker.exec(source)) !== null) {
+    let position = marker.lastIndex;
+    while (/\s/.test(source[position] || "")) position++;
+    const payload = readPackedJsString(source, position);
+    if (!payload) continue;
+    position = payload.next;
+    const numbers = source.slice(position).match(/^\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*/);
+    if (!numbers) continue;
+    const radix = Number(numbers[1]);
+    const count = Number(numbers[2]);
+    position += numbers[0].length;
+    while (/\s/.test(source[position] || "")) position++;
+    const dictionary = readPackedJsString(source, position);
+    if (!dictionary || radix < 2 || radix > 62 || count < 1 || count > 5000) continue;
+    position = dictionary.next;
+    const split = source.slice(position).match(/^\s*\.split\s*\(\s*(['"])\|\1\s*\)\s*\)\s*\)/);
+    if (!split) continue;
+    const end = position + split[0].length;
+    const words = dictionary.value.split("|");
+    if (words.length < count) continue;
+    let decoded = payload.value;
+    for (let token = count - 1; token >= 0; token--) {
+      const word = words[token];
+      if (!word) continue;
+      const tokenPattern = new RegExp("\\b" + token.toString(radix) + "\\b", "g");
+      decoded = decoded.replace(tokenPattern, () => word);
+    }
+    output += source.slice(cursor, match.index) + decoded;
+    cursor = end;
+    marker.lastIndex = end;
+  }
+  return cursor ? output + source.slice(cursor) : source;
+}
+
 function extractDirectMedia(html: string, pageUrl: string): { url: string; type: string }[] {
   const decoded = deEscape(html).replace(/\\u0026/g, "&").replace(/\\u003d/g, "=").replace(/\\\//g, "/").replace(/&amp;/g, "&");
-  const out: { url: string; type: string }[] = []; const seen = new Set<string>();
+  const out: { url: string; type: string }[] = [];
+  const seen = new Set<string>();
   const add = (raw: string) => {
-    let url = String(raw || "").trim().replace(/^['"]|['"]$/g, ""); if (!url || /^(blob:|data:|javascript:)/i.test(url)) return;
+    let url = String(raw || "").trim().replace(/^['"]|['"]$/g, "");
+    if (!url || /^(blob:|data:|javascript:)/i.test(url)) return;
     try { url = new URL(url, pageUrl).toString(); } catch { return; }
     if (!/^https?:\/\//i.test(url) || seen.has(url)) return;
     const path = url.split(/[?#]/)[0].toLowerCase();
-    const type = /\.m3u8$/.test(path) ? "m3u8" : /\.(mp4|m4v)$/.test(path) ? "mp4" : "";
+    const type = /\.m3u8$/.test(path) ? "m3u8" : /\.mpd$/.test(path) ? "mpd" : /\.(mp4|m4v)$/.test(path) ? "mp4" : "";
     if (type) { seen.add(url); out.push({ url, type }); }
   };
+
+  // The current StreamHG JWPlayer config prefers hls4, then hls3/hls2.
+  const preferredRe = /["']?hls([234])["']?\s*:\s*["']([^"']+?\.m3u8(?:\?[^"']*)?)["']/gi;
+  const preferred: Array<{ rank: number; url: string }> = [];
+  let preferredMatch: RegExpExecArray | null;
+  while ((preferredMatch = preferredRe.exec(decoded)) !== null) {
+    preferred.push({
+      rank: preferredMatch[1] === "4" ? 0 : preferredMatch[1] === "3" ? 1 : 2,
+      url: preferredMatch[2],
+    });
+  }
+  preferred.sort((a, b) => a.rank - b.rank);
+  for (const item of preferred) add(item.url);
+
   const patterns = [
-    /(?:file|src|source|hls|streaming_url|m3u8_path|directSrc)\s*[:=]\s*["']([^"']+)["']/gi,
-    /["'](https?:\/\/[^"'\s<>]+?\.(?:m3u8|mp4|m4v)(?:\?[^"'\s<>]*)?)["']/gi,
-    /(?:https?:)?\/\/[^"'\s<>]+?\.(?:m3u8|mp4|m4v)(?:\?[^"'\s<>]*)?/gi,
+    /(?:file|src|source|hls[234]?|streaming_url|m3u8_path|directSrc)\s*[:=]\s*["']([^"']+)["']/gi,
+    /["'](https?:\/\/[^"'\s<>]+?\.(?:m3u8|mpd|mp4|m4v)(?:\?[^"'\s<>]*)?)["']/gi,
+    /["']((?:\/|\.\/)[^"'\s<>]+?\.(?:m3u8|mpd|mp4|m4v)(?:\?[^"'\s<>]*)?)["']/gi,
+    /(?:https?:)?\/\/[^"'\s<>]+?\.(?:m3u8|mpd|mp4|m4v)(?:\?[^"'\s<>]*)?/gi,
   ];
-  for (const re of patterns) { let m: RegExpExecArray | null; while ((m = re.exec(decoded)) !== null) add(m[1] || m[0]); }
+  for (const re of patterns) {
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(decoded)) !== null) add(m[1] || m[0]);
+  }
   return out;
 }
+
 async function resolveModernMirror(server: ServerItem, axios: any, headers: Record<string, string>, signal?: AbortSignal, cheerio?: any, providerContext?: any): Promise<StreamOut[]> {
   const startUrl = server.url || "";
   if (!startUrl) return [];
@@ -280,10 +370,12 @@ async function resolveModernMirror(server: ServerItem, axios: any, headers: Reco
         validateStatus: (status: number) => status < 500,
       });
       const body = typeof response.data === "string" ? response.data : JSON.stringify(response.data || {});
+      const decodedBody = unpackPackedScripts(body);
       const media = extractDirectMedia(body, pageUrl);
-      // StreamHG/Bingr can expose a browser-only blob video while the actual
-      // transport is a stream_proxy.php relay assembled in the page script.
-      const proxyMedia = extractM3u8(body, pageUrl);
+      for (const item of extractDirectMedia(decodedBody, pageUrl)) {
+        if (!media.some((existing) => existing.url === item.url)) media.push(item);
+      }
+      const proxyMedia = extractM3u8(body, pageUrl) || extractM3u8(decodedBody, pageUrl);
       if (proxyMedia && !media.some((item) => item.url === proxyMedia)) {
         media.push({ url: proxyMedia, type: "m3u8" });
       }
@@ -291,6 +383,9 @@ async function resolveModernMirror(server: ServerItem, axios: any, headers: Reco
         let origin = HUB;
         try { origin = new URL(pageUrl).origin; } catch {}
         const tracks = extractSubtitles(body, pageUrl);
+        for (const track of extractSubtitles(decodedBody, pageUrl)) {
+          if (!tracks.some((existing) => existing.uri === track.uri)) tracks.push(track);
+        }
         return media.map((item) => ({
           server: server.name,
           link: item.url,
