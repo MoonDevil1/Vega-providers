@@ -178,7 +178,7 @@ export async function loadPlaylist(ctx: ProviderContext): Promise<LivePlaylist> 
 }
 
 function normalizeChannelName(value: string): string {
-  return value.toLowerCase().replace(/\\b(?:hd|fhd|uhd|4k)\\b/g, "").replace(/[^a-z0-9]/g, "");
+  return value.toLowerCase().replace(/\b(?:hd|fhd|uhd|4k)\b/g, "").replace(/[^a-z0-9]/g, "");
 }
 
 function matchFallback(primary: LiveChannel, backups: LiveChannel[]): LiveChannel | undefined {
@@ -205,7 +205,7 @@ export async function loadChannels(ctx: ProviderContext): Promise<LiveChannel[]>
       timeout: 20000,
       maxRedirects: 5,
     });
-    const source = (typeof response.data === "string" ? response.data : String(response.data ?? "")).replace(/^\\uFEFF/, "");
+    const source = (typeof response.data === "string" ? response.data : String(response.data ?? "")).replace(/^\uFEFF/, "");
     if (source.trimStart().startsWith("#EXTM3U")) backups = parsePlaylistDocument(source).channels;
   } catch {
     // The primary playlist remains usable when the optional backup is offline.
