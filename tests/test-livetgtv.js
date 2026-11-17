@@ -27,6 +27,12 @@ const fixture = [
   "https://example.com/missing-auth.m3u8",
 ].join("\n");
 
+const backupFixture = [
+  "#EXTM3U",
+  '#EXTINF:-1 tvg-id="free-1" tvg-name="Free News" tvg-logo="https://example.com/news.png" group-title="News",Free News',
+  "https://backup.example.com/news/index.m3u8",
+].join("\n");
+
 const calls = [];
 const providerContext = {
   axios: {
@@ -35,6 +41,7 @@ const providerContext = {
       if (url === "https://livetgtv.lovable.app/api/public/playlist.m3u") {
         return { data: fixture };
       }
+      if (url === "https://hjh-545.pages.dev/") return { data: backupFixture };
       if (url === "https://livetgtv.lovable.app/api/public/channels/drm-multi") {
         return {
           data: {
@@ -132,11 +139,14 @@ const providerContext = {
   assert.equal(meta.linkList[0].directLinks[0].link, all[0].link);
 
   const streams = await getStream({ link: all[0].link, type: "movie", providerContext });
-  assert.equal(streams.length, 1);
+  assert.equal(streams.length, 2, "a matching backup playlist stream should be exposed after the primary");
+  assert.equal(streams[0].server, "LiveTGTV (Primary)");
   assert.equal(streams[0].type, "m3u8");
   assert.equal(streams[0].link, "https://example.com/news.m3u8?token=temporary");
   assert.equal(streams[0].headers["User-Agent"], "TestPlayer/1.0");
   assert.equal(streams[0].headers.Referer, "https://example.com/");
+  assert.equal(streams[1].server, "LiveTGTV (Backup)");
+  assert.equal(streams[1].link, "https://backup.example.com/news/index.m3u8");
 
   const cookieStreams = await getStream({ link: all[4].link, type: "movie", providerContext });
   assert.equal(cookieStreams.length, 1, "playlist-provided cookie credentials should be passed to playback");
