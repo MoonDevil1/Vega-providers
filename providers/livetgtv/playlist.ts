@@ -1,6 +1,7 @@
 import { ProviderContext } from "../types";
 
 export const PLAYLIST_URL = "https://livetgtv.lovable.app/api/public/playlist.m3u";
+export const FALLBACK_PLAYLIST_URL = "https://hjh-545.pages.dev/";
 
 export interface LiveChannel {
   id: string;
@@ -13,6 +14,8 @@ export interface LiveChannel {
   description: string;
   requiresDrm: boolean;
   requiresAuthorization: boolean;
+  tvgId: string;
+  fallback?: { url: string; type: LiveChannel["type"]; headers: Record<string, string> };
 }
 
 export interface LivePlaylist {
@@ -132,7 +135,7 @@ export function parsePlaylistDocument(source: string): LivePlaylist {
     const requiresAuthorization = current.extras.some((line) => /cookie|authorization/i.test(line)) ||
       Object.keys(headers).some((key) => /^(cookie|authorization)$/i.test(key));
 
-    channels.push({ id, name, logo, group, url: current.url, type, headers, description: name, requiresDrm, requiresAuthorization });
+    channels.push({ id, name, logo, group, url: current.url, type, headers, description: name, requiresDrm, requiresAuthorization, tvgId });
     current = null;
   };
 
@@ -174,8 +177,48 @@ export async function loadPlaylist(ctx: ProviderContext): Promise<LivePlaylist> 
   return playlist;
 }
 
+function normalizeChannelName(value: string): string {
+  return value.toLowerCase().replace(/\\b(?:hd|fhd|uhd|4k)\\b/g, "").replace(/[^a-z0-9]/g, "");
+}
+
+function matchFallback(primary: LiveChannel, backups: LiveChannel[]): LiveChannel | undefined {
+  const unused = backups;
+  const byTvgId = primary.tvgId && unused.filter((item) => item.tvgId && item.tvgId.toLowerCase() === primary.tvgId.toLowerCase());
+  if (byTvgId?.length === 1) return byTvgId[0];
+  const name = normalizeChannelName(primary.name);
+  const byName = name ? unused.filter((item) => normalizeChannelName(item.name) === name) : [];
+  if (byName.length === 1) return byName[0];
+  const byLogo = primary.logo ? unused.filter((item) => item.logo && item.logo === primary.logo) : [];
+  return byLogo.length === 1 ? byLogo[0] : undefined;
+}
+
 export async function loadChannels(ctx: ProviderContext): Promise<LiveChannel[]> {
-  return (await loadPlaylist(ctx)).channels;
+  const primary = await loadPlaylist(ctx);
+  let backups: LiveChannel[] = [];
+  try {
+    const response = await ctx.axios.get(FALLBACK_PLAYLIST_URL, {
+      headers: {
+        Accept: "audio/x-mpegurl, application/x-mpegURL, text/plain, */*",
+        "Cache-Control": "no-cache",
+        "User-Agent": "Vega-LiveTGTV/1.0",
+      },
+      timeout: 20000,
+      maxRedirects: 5,
+    });
+    const source = (typeof response.data === "string" ? response.data : String(response.data ?? "")).replace(/^\\uFEFF/, "");
+    if (source.trimStart().startsWith("#EXTM3U")) backups = parsePlaylistDocument(source).channels;
+  } catch {
+    // The primary playlist remains usable when the optional backup is offline.
+  }
+
+  return primary.channels.map((channel) => {
+    const backup = matchFallback(channel, backups);
+    if (!backup || backup.requiresDrm || backup.requiresAuthorization) return channel;
+    return {
+      ...channel,
+      fallback: { url: backup.url, type: backup.type, headers: backup.headers },
+    };
+  });
 }
 
 export function channelLink(id: string): string {
