@@ -232,6 +232,42 @@ async function main() {
     "modern Cineverse StreamHG mirror must resolve to its playable HLS URL",
   );
 
+  // The current StreamHG mirror packs its JWPlayer source object. Vega must
+  // decode the packed config, prefer hls4, and resolve relative HLS URLs.
+  const packedMoviePageUrl = "https://m1.multimovies.courses/movie/avengers-endgame-encore";
+  const packedEmbedUrl = "https://rozgarlelo.modiplay.xyz/embed/tmdb/movie?id=1824694";
+  const packedMirrorUrl = "https://hanerix.com/e/pexfy6b96bc9";
+  const packedHls4Url = "https://hanerix.com/stream/demo/master.m3u8";
+  const packedHls2Url = "https://cdn.example.test/hls2/master.m3u8";
+  const packedMovieHtml =
+    '<button data-url="' + packedEmbedUrl + '"><span class="server-name">Cineverse HD</span></button>';
+  const packedEmbedHtml =
+    '<div class="srv-item" data-url="' + packedMirrorUrl + '" data-platform="streamhg" data-code="pexfy6b96bc9" data-pname="StreamHG"></div>';
+  const packedMirrorHtml = String.raw`<script>eval(function(p,a,c,k,e,d){while(c--)if(k[c])p=p.replace(new RegExp('\\b'+c.toString(a)+'\\b','g'),k[c]);return p}('var 0={1:"/stream/demo/master.m3u8",2:"https://cdn.example.test/hls2/master.m3u8"};',36,3,'links|hls4|hls2'.split('|')));</script>`;
+  const packedCineverseContext = {
+    axios: {
+      async get(url) {
+        if (url === packedMoviePageUrl) return { data: packedMovieHtml, status: 200, headers: {} };
+        if (url === packedEmbedUrl) return { data: packedEmbedHtml, status: 200, headers: {} };
+        if (url === packedMirrorUrl) return { data: packedMirrorHtml, status: 200, headers: {} };
+        throw new Error("Unexpected packed Cineverse URL: " + url);
+      },
+    },
+    cheerio: null,
+  };
+  const packedCineverseStreams = await getStream({
+    link: packedMoviePageUrl,
+    type: "movie",
+    signal: new AbortController().signal,
+    providerContext: packedCineverseContext,
+  });
+  assert.equal(packedCineverseStreams[0]?.link, packedHls4Url,
+    "Cineverse should prefer its hls4 source and resolve its relative URL");
+  assert.ok(packedCineverseStreams.some((stream) => stream.link === packedHls2Url),
+    "Cineverse should retain hls2 as a native-player fallback");
+  assert.equal(packedCineverseStreams[0]?.type, "m3u8",
+    "packed StreamHG HLS source must be returned as native m3u8 media");
+
 
   // Desktop's provider bridge has a limited pending-operation budget. Keep
   // the provider's own resolver fan-out bounded so a page with many healthy
